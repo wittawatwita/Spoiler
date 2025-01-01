@@ -1,14 +1,170 @@
 <!DOCTYPE html>
-<html lang="th">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>หน้าเว็บพร้อม CSS</title>
-    <link rel="stylesheet" href="สปอย.css">
+    <title>Novel Info</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f9f9f9;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 20px auto;
+            background: #fff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .novel-header {
+            display: flex;
+            padding: 20px;
+        }
+
+        .novel-header img {
+            width: 200px;
+            border-radius: 4px;
+            margin-right: 20px;
+        }
+
+        .novel-header .info {
+            flex-grow: 1;
+        }
+
+        .novel-header h1 {
+            font-size: 24px;
+            margin: 0 0 10px;
+        }
+
+        .novel-header p {
+            margin: 5px 0;
+            color: #555;
+        }
+
+        .novel-header .rating {
+            margin: 10px 0;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #e63946;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background 0.3s;
+        }
+
+        .button:hover {
+            background: #d62828;
+        }
+
+        .chapter-list {
+            background: #333;
+            color: #fff;
+            padding: 20px;
+        }
+
+        .chapter-list table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .chapter-list table td {
+            padding: 10px;
+            border-bottom: 1px solid #444;
+        }
+
+        .chapter-list table td:nth-child(odd) {
+            background: #444;
+        }
+
+        .chapter-list table td:nth-child(even) {
+            background: #555;
+        }
+
+        .chapter-list table td a {
+            color: #e63946;
+            text-decoration: none;
+        }
+
+        .chapter-list table td a:hover {
+            text-decoration: underline;
+        }
+
+        .pagination {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .pagination a {
+            color: #fff;
+            margin: 0 5px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .pagination a:hover {
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
-    <h1>สวัสดี! ยินดีต้อนรับ</h1>
-    <p>นี่คือหน้าเว็บพร้อมการตกแต่งด้วย CSS</p>
-    <button>คลิกที่นี่</button>
+    <div class="container">
+        <!-- Top Section -->
+        <div class="novel-header">
+            <img src="path-to-image1.png" alt="Novel Cover">
+            <div class="info">
+                <h1>TENSEI SHITARA SLIME DATTA KEN</h1>
+                <p><strong>Alternative names:</strong> Regarding Reincarnating As Slime, etc.</p>
+                <p><strong>Author:</strong> Fuse</p>
+                <p><strong>Genre:</strong> Romance, Reincarnation, Action, Adventure, Fantasy, Shounen, Comedy</p>
+                <p><strong>Status:</strong> Completed</p>
+                <div class="rating">Rating: ⭐⭐⭐⭐⭐</div>
+                <a href="#" class="button">READ NOW</a>
+            </div>
+        </div>
+
+        <!-- Chapter List Section -->
+        <div class="chapter-list">
+            <h2>Chapter List</h2>
+            <table>
+                <tr>
+                    <td>0</td>
+                    <td><a href="#">Prologue</a></td>
+                </tr>
+                <tr>
+                    <td>1</td>
+                    <td><a href="#">Let’s see what I can do</a></td>
+                </tr>
+                <tr>
+                    <td>2</td>
+                    <td><a href="#">First Contact</a></td>
+                </tr>
+                <tr>
+                    <td>3</td>
+                    <td><a href="#">First Conversation</a></td>
+                </tr>
+                <tr>
+                    <td>4</td>
+                    <td><a href="#">First Friend</a></td>
+                </tr>
+                <!-- More rows as needed -->
+            </table>
+
+            <div class="pagination">
+                <a href="#">1</a>
+                <a href="#">2</a>
+                <a href="#">3</a>
+                <a href="#">4</a>
+                <a href="#">&gt;&gt;</a>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
