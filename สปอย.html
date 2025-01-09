@@ -1,22 +1,88 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="th">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Library Simulation</title>
-    <link rel="stylesheet" href="สปอย.css">
+    <title>แกลเลอรีหนังสือ</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: #f9f9f9;
+        }
+        #bookGallery {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            padding: 20px;
+        }
+        .book-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            width: 200px;
+            text-align: center;
+            padding: 10px;
+        }
+        .book-card img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+        }
+        .book-card h3 {
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        .book-card button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .book-card button:hover {
+            background-color: #0056b3;
+        }
+    </style>
 </head>
 <body>
-    <header>
-        <h1>Library Simulation</h1>
-    </header>
-    <main>
-        <section class="book-gallery">
-            <h2>Select a Book</h2>
-            <div id="bookGallery">
-            </div>
-        </section>
-    </main>
-    <script src="อ่านแบบคราว.js"></script>
+    <h1 style="text-align: center;">แกลเลอรีหนังสือ</h1>
+    <div id="bookGallery"></div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const books = [
+                { 
+                    title: "ขอต้อนรับสู่ห้องเรียนนิยม (เฉพาะ) ยอดคน(ฉบับนิยาย)", 
+                    image: "https://cdn-local.mebmarket.com/meb/server1/161106/Thumbnail/book_detail_large.gif?5", 
+                    link: "ห้องเรียนนิยม.html"
+                },
+                { 
+                    title: "เกิดใหม่ทั้งทีก็เป็นสไลม์ไปซะแล้ว wn", 
+                    image: "https://img.readnovelfull.com/thumb/t-300x439/Tensei-Shitara-Slime-Datta-Ken-NCAt3AedvR.jpg", 
+                    link: "slime.html"
+                }
+            ];
+
+            const bookGallery = document.getElementById("bookGallery");
+
+            // Populate book gallery
+            books.forEach((book) => {
+                const card = document.createElement("div");
+                card.className = "book-card";
+                card.innerHTML = `
+                    <img src="${book.image}" alt="${book.title}">
+                    <h3>${book.title}</h3>
+                    <button onclick="location.href='${book.link}'">กด</button>
+                `;
+                bookGallery.appendChild(card);
+            });
+        });
+    </script>
 </body>
 </html>
