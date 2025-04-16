@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>Music Player</title>
+  <style>
+    body {
+      background: #121212;
+      color: #fff;
+      font-family: 'Arial', sans-serif;
+      text-align: center;
+      padding: 30px;
+    }
+    #playPauseBtn {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background-color: #34C759;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 20px auto;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    #playPauseBtn svg {
+      width: 40px;
+      height: 40px;
+      fill: white;
+    }
+    #songList {
+      margin-top: 20px;
+    }
+    .song {
+      background: #1e1e1e;
+      padding: 10px;
+      margin: 5px 0;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: grab;
+    }
+    .song:hover {
+      background: #333;
+    }
+    .delete-btn {
+      background: transparent;
+      border: none;
+      color: #ff4d4d;
+      font-size: 20px;
+      cursor: pointer;
+    }
+    #addSongBtn {
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: #34C759;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .drag-over {
+      border: 2px dashed #34C759;
+    }
+    #progressContainer {
+      margin-top: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #progress {
+      width: 80%;
+      margin: 0 10px;
+      cursor: pointer;
+    }
+    #currentTime {
+      font-size: 14px;
+    }
+    #duration {
+      font-size: 14px;
+    }
+    #progressContainer button {
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+  margin: 0 5px;
+  cursor: pointer;
+  padding: 5px 10px;
+  border-radius: 4px;
+  transition: background 0.2s, transform 0.2s;
+}
+
+#progressContainer button:hover {
+  background: #2a2a2a;
+  transform: scale(1.1);
+}
+  </style>
+</head>
+<body>
+
+  <h1>🎵 My Music Player</h1>
+
+  <button id="playPauseBtn">
+    <svg id="playIcon" viewBox="0 0 24 24">
+      <path id="playPath" d="M8 5v14l11-7z"/>
+    </svg>
+  </button>
+
+  <div id="nowPlaying">กดเลือกเพลงเพื่อเริ่มเล่น</div>
+
+  <input type="file" id="songFile" accept="audio/*">
+  <button id="addSongBtn">เพิ่มเพลง</button>
+
+  <div id="songList"></div>
+
+  <audio id="audio" controls style="display:none;"></audio>
+
+  <div id="progressContainer">
+    <button id="prevBtn"><<</button>
+  <button id="stopBtn">STOP</button>
+  <button id="repeatBtn">REPEAT</button>
+  <button id="nextBtn">>></button>
+
+    <span id="currentTime">00:00</span>
+    <input type="range" id="progress" value="0" max="100" step="1">
+    <span id="duration">00:00</span>
+  </div>
+
+  <script>
+const audio = document.getElementById('audio');
+const playPauseBtn = document.getElementById('playPauseBtn');
+const playPath = document.getElementById('playPath');
+const nowPlaying = document.getElementById('nowPlaying');
+const songList = document.getElementById('songList');
+const addSongBtn = document.getElementById('addSongBtn');
+const songFileInput = document.getElementById('songFile');
+const progress = document.getElementById('progress');
+const currentTimeDisplay = document.getElementById('currentTime');
+const durationDisplay = document.getElementById('duration');
+
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const stopBtn = document.getElementById('stopBtn');
+const repeatBtn = document.getElementById('repeatBtn');
+
+let isPlaying = false;
+let currentSong = null;
+let db;
+let songQueue = [];
+let currentSongIndex = 0;
+let repeatMode = false;
+let dragSrcEl = null;
+
+const request = indexedDB.open('musicDB', 1);
+
+request.onerror = function(event) {
+  console.error('Database error:', event.target.error);
+};
+
+request.onsuccess = function(event) {
+  db = event.target.result;
+  loadSongs();
+};
+
+request.onupgradeneeded = function(event) {
+  db = event.target.result;
+  const objectStore = db.createObjectStore('songs', { keyPath: 'id', autoIncrement: true });
+  objectStore.createIndex('name', 'name', { unique: false });
+};
+
+function saveOrder() {
+  const order = Array.from(document.querySelectorAll('.song')).map(song => parseInt(song.dataset.id));
+  localStorage.setItem('songOrder', JSON.stringify(order));
+}
+
+function loadSongs() {
+  const transaction = db.transaction(['songs'], 'readonly');
+  const objectStore = transaction.objectStore('songs');
+  const request = objectStore.getAll();
+
+  request.onsuccess = function(event) {
+    const songs = event.target.result;
+    const savedOrder = JSON.parse(localStorage.getItem('songOrder')) || [];
+
+    const sortedSongs = [...songs].sort((a, b) => {
+      return savedOrder.indexOf(a.id) - savedOrder.indexOf(b.id);
+    });
+
+    sortedSongs.forEach(song => {
+      createSongElement(song.id, song.name, song.file);
+      songQueue.push({ id: song.id, name: song.name, file: song.file });
+    });
+  };
+}
+
+addSongBtn.addEventListener('click', () => {
+  const file = songFileInput.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function(event) {
+      const fileData = event.target.result;
+      const transaction = db.transaction(['songs'], 'readwrite');
+      const objectStore = transaction.objectStore('songs');
+      const addRequest = objectStore.add({ name: file.name.replace(/\.[^/.]+$/, ""), file: fileData });
+
+      addRequest.onsuccess = function(e) {
+        const newId = e.target.result;
+        createSongElement(newId, file.name.replace(/\.[^/.]+$/, ""), fileData);
+        songQueue.push({ id: newId, name: file.name.replace(/\.[^/.]+$/, ""), file: fileData });
+
+        const savedOrder = JSON.parse(localStorage.getItem('songOrder')) || [];
+        savedOrder.push(newId);
+        localStorage.setItem('songOrder', JSON.stringify(savedOrder));
+      };
+    };
+    reader.readAsArrayBuffer(file);
+    songFileInput.value = '';
+  } else {
+    alert('กรุณาเลือกไฟล์เพลง');
+  }
+});
+
+playPauseBtn.addEventListener('click', () => {
+  if (!audio.src) {
+    alert('กรุณาเลือกเพลงก่อน');
+    return;
+  }
+
+  if (isPlaying) {
+    audio.pause();
+    setPlayIcon();
+    isPlaying = false;
+  } else {
+    audio.play();
+    setPauseIcon();
+    isPlaying = true;
+  }
+});
+
+function createSongElement(id, name, fileData) {
+  const songDiv = document.createElement('div');
+  songDiv.classList.add('song');
+  songDiv.setAttribute('data-id', id);
+  songDiv.setAttribute('draggable', 'true');
+
+  const songName = document.createElement('span');
+  songName.textContent = name;
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.textContent = '🗑️';
+  deleteBtn.classList.add('delete-btn');
+
+  deleteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const transaction = db.transaction(['songs'], 'readwrite');
+    const objectStore = transaction.objectStore('songs');
+    objectStore.delete(id);
+    songDiv.remove();
+
+    if (currentSong === id) {
+      audio.pause();
+      nowPlaying.textContent = 'กดเลือกเพลงเพื่อเริ่มเล่น';
+      setPlayIcon();
+      isPlaying = false;
+    }
+
+    const savedOrder = JSON.parse(localStorage.getItem('songOrder')) || [];
+    const updatedOrder = savedOrder.filter(songId => songId !== id);
+    localStorage.setItem('songOrder', JSON.stringify(updatedOrder));
+  });
+
+  songDiv.addEventListener('click', () => {
+    if (currentSong !== id) {
+      const blob = new Blob([fileData]);
+      const url = URL.createObjectURL(blob);
+      audio.src = url;
+      currentSong = id;
+      currentSongIndex = songQueue.findIndex(song => song.id === currentSong);
+      audio.play();
+      setPauseIcon();
+      isPlaying = true;
+      nowPlaying.textContent = name;
+    }
+  });
+
+  songDiv.addEventListener('dragstart', (e) => {
+    dragSrcEl = songDiv;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+    songDiv.style.opacity = '0.5';
+  });
+
+  songDiv.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    songDiv.classList.add('drag-over');
+  });
+
+  songDiv.addEventListener('dragleave', () => {
+    songDiv.classList.remove('drag-over');
+  });
+
+  songDiv.addEventListener('drop', (e) => {
+    e.stopPropagation();
+    songDiv.classList.remove('drag-over');
+
+    if (dragSrcEl !== songDiv) {
+      const parent = songList;
+      const children = Array.from(parent.children);
+      const srcIndex = children.indexOf(dragSrcEl);
+      const destIndex = children.indexOf(songDiv);
+
+      if (srcIndex < destIndex) {
+        parent.insertBefore(dragSrcEl, songDiv.nextSibling);
+      } else {
+        parent.insertBefore(dragSrcEl, songDiv);
+      }
+
+      saveOrder();
+    }
+  });
+
+  songDiv.addEventListener('dragend', () => {
+    songDiv.style.opacity = '1';
+    document.querySelectorAll('.song').forEach(s => s.classList.remove('drag-over'));
+  });
+
+  songDiv.appendChild(songName);
+  songDiv.appendChild(deleteBtn);
+  songList.appendChild(songDiv);
+}
+
+function setPlayIcon() {
+  playPath.setAttribute('d', 'M8 5v14l11-7z');
+}
+
+function setPauseIcon() {
+  playPath.setAttribute('d', 'M6 19h4V5H6v14zm8-14v14h4V5h-4z');
+}
+
+audio.addEventListener('ended', () => {
+  if (repeatMode) {
+    audio.currentTime = 0;
+    audio.play();
+  } else if (currentSongIndex < songQueue.length - 1) {
+    currentSongIndex++;
+    playSongByIndex(currentSongIndex);
+  } else {
+    currentSongIndex = 0;
+    playSongByIndex(currentSongIndex);
+  }
+});
+
+audio.addEventListener('timeupdate', () => {
+  if (audio.duration) {
+    progress.value = (audio.currentTime / audio.duration) * 100;
+    currentTimeDisplay.textContent = formatTime(audio.currentTime);
+    durationDisplay.textContent = formatTime(audio.duration);
+  }
+});
+
+progress.addEventListener('input', () => {
+  if (audio.duration) {
+    audio.currentTime = (progress.value / 100) * audio.duration;
+  }
+});
+
+function formatTime(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+function playSongByIndex(index) {
+  const song = songQueue[index];
+  if (!song) return;
+  const blob = new Blob([song.file]);
+  const url = URL.createObjectURL(blob);
+  audio.src = url;
+  currentSong = song.id;
+  audio.play();
+  setPauseIcon();
+  isPlaying = true;
+  nowPlaying.textContent = song.name;
+}
+
+// 🔘 ปุ่มควบคุม
+prevBtn.addEventListener('click', () => {
+  if (currentSongIndex > 0) {
+    currentSongIndex--;
+    playSongByIndex(currentSongIndex);
+  }
+});
+
+nextBtn.addEventListener('click', () => {
+  if (currentSongIndex < songQueue.length - 1) {
+    currentSongIndex++;
+    playSongByIndex(currentSongIndex);
+  }
+});
+
+stopBtn.addEventListener('click', () => {
+  audio.pause();
+  audio.currentTime = 0;
+  isPlaying = false;
+  setPlayIcon();
+});
+
+repeatBtn.addEventListener('click', () => {
+  repeatMode = !repeatMode;
+  repeatBtn.style.color = repeatMode ? '#34C759' : 'white';
+});
+</script>
+
+  </script>
+
+</body>
+</html>
