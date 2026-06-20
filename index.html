@@ -770,6 +770,70 @@ function setPlayState(p) {
   updateHeroPlayButton();
 }
 
+/* ══════════════════════════════════════════════════════════
+   ⚠️ FIX (เครื่องเก่า: ปุ่มขึ้น pause แต่ไม่มีเสียง, แถบเวลาค้าง 0:00):
+   เดิมตอนเริ่มเพลงใหม่ โค้ดจะ src = blobUrl แล้วเรียก setPlayState(true)
+   (ซึ่งเรียก audioElement.play()) ทันที โดยไม่รอให้ไฟล์โหลด/decode
+   เสร็จก่อน บนเครื่องแรง ๆ การ decode เร็วมากจนดูเหมือนเล่นได้ปกติ
+   แต่บนเครื่องเก่า/ชิปช้า audio element เข้าสถานะ "playing" ได้ทันที
+   (.play() resolve สำเร็จ) ทั้งที่ยังไม่มีข้อมูลเสียงพร้อมป้อนจริง ๆ
+   ทำให้ค้างเงียบที่ 0:00 ตลอดโดยไม่มี error ใด ๆ เกิดขึ้นเลย
+
+   วิธีแก้: แยกฟังก์ชัน startPlayback() สำหรับ "เริ่มเพลงใหม่" โดยเฉพาะ
+   จะรอ event 'canplay' (เบราว์เซอร์ยืนยันว่าพร้อมเล่นจริง) ก่อนค่อย
+   เรียก play() และตั้ง timeout 8 วินาทีกันไว้เผื่อเครื่องช้ามาก ๆ จน
+   ไม่ยิง canplay เลย จะได้แจ้งเตือนผู้ใช้แทนที่จะค้างเงียบตลอดไป
+══════════════════════════════════════════════════════════ */
+function startPlayback() {
+  // อัปเดต UI เป็นสถานะ "กำลังเล่น" ทันทีเพื่อความรู้สึกตอบสนองไว
+  playing = true;
+  const di = document.querySelector('#desktopPlayBtn i');
+  const mi = document.getElementById('mpPlayBtn');
+  if (di) di.className = 'ti ti-player-pause';
+  if (mi) mi.className = 'ti ti-player-pause play-main';
+  updateHeroPlayButton();
+
+  let started = false;
+  let timeoutId = null;
+
+  function tryPlay() {
+    if (started) return;
+    started = true;
+    clearTimeout(timeoutId);
+    audioElement.removeEventListener('canplay', tryPlay);
+    const p = audioElement.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(err => {
+        console.warn('play() ถูกบล็อกหรือเกิดข้อผิดพลาด:', err);
+        playing = false;
+        if (di) di.className = 'ti ti-player-play';
+        if (mi) mi.className = 'ti ti-player-play play-main';
+        updateHeroPlayButton();
+        showToast('กดเล่นอีกครั้งเพื่อเริ่มเพลง');
+      });
+    }
+  }
+
+  // ถ้าพร้อมเล่นอยู่แล้ว (readyState >= 3 = HAVE_FUTURE_DATA) ก็เล่นได้เลย
+  if (audioElement.readyState >= 3) {
+    tryPlay();
+  } else {
+    audioElement.addEventListener('canplay', tryPlay);
+    // กันเครื่องช้ามาก ๆ จนไม่ยิง canplay เลย — แจ้งเตือนแทนที่จะค้างเงียบตลอดไป
+    timeoutId = setTimeout(() => {
+      if (started) return;
+      audioElement.removeEventListener('canplay', tryPlay);
+      console.warn('โหลดไฟล์เสียงนานเกินไป (เกิน 8 วินาที) — เครื่องอาจช้าหรือไฟล์มีปัญหา');
+      playing = false;
+      started = true;
+      if (di) di.className = 'ti ti-player-play';
+      if (mi) mi.className = 'ti ti-player-play play-main';
+      updateHeroPlayButton();
+      showToast('โหลดเพลงช้ากว่าปกติ ลองกดเล่นอีกครั้ง');
+    }, 8000);
+  }
+}
+
 document.getElementById('desktopPlayBtn').addEventListener('click', () => setPlayState(!playing));
 document.getElementById('mpPlayBtn').addEventListener('click', e => {
   e.preventDefault(); e.stopPropagation(); setPlayState(!playing);
@@ -1137,7 +1201,7 @@ async function playThisTrack(el) {
     if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
     audioElement.src = ls.audioFile;
     audioElement.load();
-    setPlayState(true); // เรียกทันทีในเฟรมเดียวกับ click — ยังนับเป็น user gesture
+    startPlayback(); // รอ canplay ก่อนเล่นจริง — กันเครื่องเก่าค้างเงียบที่ 0:00
     updateTrackHighlight(el, sn);
     saveCurrentAudioSrc(ls.audioFile, ls.audioType || 'audio/mpeg');
     return;
@@ -1159,9 +1223,8 @@ async function playThisTrack(el) {
 
         audioElement.src = blobUrl;
         audioElement.load();
-        // กด play() อีกครั้งหลังโหลดเสร็จ — ถ้าโดนบล็อก setPlayState จะ
-        // จับ error และแจ้งเตือนผู้ใช้แทนที่จะเงียบสนิท
-        setPlayState(true);
+        // รอ canplay ก่อนเล่นจริง — กันเครื่องเก่าค้างเงียบที่ 0:00 ทั้งที่ปุ่มขึ้น pause
+        startPlayback();
         updateTrackHighlight(el, sn);
 
         // ⚠️ FIX (เครื่องรุ่นเก่า/สเปกต่ำ เช่น Alpha 5G เล่นไม่ได้เลย):
