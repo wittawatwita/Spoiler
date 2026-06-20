@@ -255,22 +255,22 @@
         <div class="meta-fields">
           <div class="input-block">
             <label class="input-label">ชื่อเพลง</label>
-            <input type="text" class="form-input" placeholder="ระบุชื่อเพลงของคุณ" autocomplete="off">
+            <input type="text" class="form-input" id="songNameInput" placeholder="ระบุชื่อเพลงของคุณ (ถ้าไม่ระบุ จะใช้ชื่อไฟล์เสียงแทน)" autocomplete="off">
           </div>
           
           <div class="input-block">
             <label class="input-label">ศิลปิน</label>
-            <input type="text" class="form-input" placeholder="ระบุชื่อศิลปิน" autocomplete="off">
+            <input type="text" class="form-input" id="artistInput" placeholder="ระบุชื่อศิลปิน (ไม่บังคับ)" autocomplete="off">
           </div>
 
           <div class="input-block">
             <label class="input-label">อัลบั้ม (ไม่บังคับ)</label>
-            <input type="text" class="form-input" placeholder="ซิงเกิลเดี่ยว หรือระบุชื่ออัลบั้ม" autocomplete="off">
+            <input type="text" class="form-input" id="albumInput" placeholder="ซิงเกิลเดี่ยว หรือระบุชื่ออัลบั้ม" autocomplete="off">
           </div>
 
           <div class="input-block">
             <label class="input-label">แนวเพลง (Genre)</label>
-            <select class="form-input form-select">
+            <select class="form-input form-select" id="genreInput">
               <option value="pop">ป๊อป (Pop)</option>
               <option value="thai-indie">ไทยอินดี้ (Thai Indie)</option>
               <option value="hiphop">ฮิปฮอป / แร็พ (Hip Hop / Rap)</option>
@@ -381,6 +381,12 @@
     }
   }
 
+  // ตัดนามสกุลไฟล์ออก เพื่อใช้เป็นชื่อเพลงอัตโนมัติเวลาไม่ได้กรอกชื่อเพลง
+  function stripFileExtension(filename) {
+    const idx = filename.lastIndexOf('.');
+    return idx > 0 ? filename.substring(0, idx) : filename;
+  }
+
   // ฟังก์ชันจัดการเลือกไฟล์เสียง พร้อมการตรวจสอบ
   function handleAudioSelect(input) {
     if(input.files && input.files[0]) {
@@ -413,6 +419,12 @@
       document.getElementById('fileNameText').innerText = `${file.name} (${fileSizeMB}MB)`;
       document.getElementById('audioZoneText').innerText = `✓ เลือกไฟล์สำเร็จ: ${file.name}`;
       document.getElementById('uploadProgressSection').style.display = 'block';
+
+      // ถ้าช่อง "ชื่อเพลง" ยังว่างอยู่ ให้เติมชื่อไฟล์ (ตัดนามสกุล) ให้อัตโนมัติทันที
+      const songNameInput = document.getElementById('songNameInput');
+      if (songNameInput && !songNameInput.value.trim()) {
+        songNameInput.value = stripFileExtension(file.name);
+      }
     }
   }
 
@@ -431,19 +443,22 @@
 
   // 🌟 ฟังก์ชันหลักในการบันทึกข้อมูลเพลงแบบถาวรลงระบบ
   function submitSongData() {
-    const songName = document.getElementById('songNameInput')?.value.trim() || '';
-    const artist = document.getElementById('artistInput')?.value.trim() || '';
-    const album = document.getElementById('albumInput')?.value.trim() || 'ซิงเกิลเดี่ยว';
-
-    if(!songName || !artist) {
-      alert('🎵 กรุณากรอกชื่อเพลงและชื่อศิลปินด้วยครับ!');
-      return;
-    }
-
     if(!selectedAudioFile) {
       alert('🎵 กรุณาเลือกไฟล์เสียงด้วยครับ!');
       return;
     }
+
+    // อ่านชื่อเพลงจากช่องกรอก ถ้าว่างให้ใช้ชื่อไฟล์เสียงแทนโดยอัตโนมัติ
+    const songNameInput = document.getElementById('songNameInput');
+    let songName = songNameInput?.value.trim() || '';
+    if (!songName) {
+      songName = stripFileExtension(selectedAudioFile.name);
+      if (songNameInput) songNameInput.value = songName;
+    }
+
+    // ศิลปิน ไม่บังคับกรอก ถ้าว่างจะใส่ "Unknown Artist" ให้
+    const artist = document.getElementById('artistInput')?.value.trim() || 'Unknown Artist';
+    const album = document.getElementById('albumInput')?.value.trim() || 'ซิงเกิลเดี่ยว';
 
     if(!db) {
       alert('❌ ฐานข้อมูลไม่พร้อม กรุณาลองใหม่');
@@ -526,7 +541,19 @@
             uploadedAt: new Date().toISOString()
           });
           localStorage.setItem('uploadedSongs', JSON.stringify(uploadedSongs));
-          
+
+          // 🔧 FIX: บันทึกรูปปกลง localStorage ด้วย key cover_<ชื่อเพลง>_<ศิลปิน>
+          // เพื่อให้หน้า index.html (Hero Section / Player Bar) ที่อ่านผ่าน getCoverSrc()
+          // หารูปเจอทันที โดยไม่ต้องพึ่งพา IndexedDB เพียงอย่างเดียว
+          if (selectedCoverImage) {
+            try {
+              localStorage.setItem(`cover_${songName}_${artist}`, selectedCoverImage);
+            } catch (storageErr) {
+              // ถ้ารูปใหญ่เกินจน localStorage เต็ม ก็ไม่ต้องให้การอัปโหลดเพลงล้มเหลวไปด้วย
+              console.warn('ไม่สามารถบันทึกรูปปกลง localStorage (อาจมีขนาดใหญ่เกินไป):', storageErr);
+            }
+          }
+
           event.target.innerText = originalText;
           event.target.disabled = false;
           alert('✅ อัปโหลดเพลงเข้าสู่ระบบ SoundFlow เรียบร้อย!');
