@@ -738,6 +738,7 @@ audioElement.setAttribute('webkit-playsinline', '');
 document.body.appendChild(audioElement);
 let playing = false;
 let currentPlayIndex = -1;
+let currentBlobUrl = null; // เก็บ Blob URL ปัจจุบันไว้ revoke ทิ้งตอนเปลี่ยนเพลง กันหน่วยความจำรั่ว
 
 /* เก็บ error ล่าสุดไว้ debug และแจ้งผู้ใช้แบบเข้าใจง่าย แทนที่จะเงียบสนิท */
 audioElement.addEventListener('error', () => {
@@ -1132,6 +1133,8 @@ async function playThisTrack(el) {
   const uploaded = JSON.parse(localStorage.getItem('uploadedSongs')) || [];
   const ls = uploaded.find(s => s.name === sn && s.artist === an);
   if (ls && ls.audioFile && ls.audioFile.startsWith('data:')) {
+    // เคลียร์ Blob URL ของเพลงก่อนหน้า (ถ้ามี) ก่อนสลับไปเล่นจาก data URL
+    if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
     audioElement.src = ls.audioFile;
     audioElement.load();
     setPlayState(true); // เรียกทันทีในเฟรมเดียวกับ click — ยังนับเป็น user gesture
@@ -1146,15 +1149,34 @@ async function playThisTrack(el) {
       const songs = await getAllSongsFromDB();
       const s = songs.find(x => x.name === sn && x.artist === an);
       if (s && s.audioFile) {
-        const mime   = s.audioType || 'audio/mpeg';
-        const blob   = new Blob([s.audioFile], { type: mime });
-        audioElement.src = URL.createObjectURL(blob);
+        const mime = s.audioType || 'audio/mpeg';
+        const blob = new Blob([s.audioFile], { type: mime });
+        const blobUrl = URL.createObjectURL(blob);
+        // เคลียร์ Blob URL ตัวก่อนหน้าทิ้ง ป้องกันหน่วยความจำรั่วสะสม
+        // (สำคัญมากบนเครื่องสเปกต่ำ/RAM น้อย เพราะ blob ค้างใน memory ได้)
+        if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+        currentBlobUrl = blobUrl;
+
+        audioElement.src = blobUrl;
         audioElement.load();
         // กด play() อีกครั้งหลังโหลดเสร็จ — ถ้าโดนบล็อก setPlayState จะ
         // จับ error และแจ้งเตือนผู้ใช้แทนที่จะเงียบสนิท
         setPlayState(true);
         updateTrackHighlight(el, sn);
-        try { saveCurrentAudioSrc(arrayBufferToBase64DataUrl(s.audioFile, mime), mime); } catch {}
+
+        // ⚠️ FIX (เครื่องรุ่นเก่า/สเปกต่ำ เช่น Alpha 5G เล่นไม่ได้เลย):
+        // เดิมตรงนี้เรียก arrayBufferToBase64DataUrl() ทุกครั้งที่กดเล่นเพลง
+        // เพื่อแปลงไฟล์เสียงทั้งก้อน (5-15MB) เป็น base64 string ผ่านการวนลูป
+        // String.fromCharCode ทีละไบต์ ซึ่งกิน CPU/RAM หนักมาก เครื่องแรง ๆ
+        // ทำเสร็จเร็วจนไม่รู้สึก แต่เครื่องสเปกต่ำ/RAM น้อยจะค้างหรือ
+        // หน่วยความจำไม่พอจนเล่นไม่ได้เลยแบบเงียบ ๆ ไม่มี error ขึ้น
+        // จึงตัดการแปลง base64 ออกจาก path การเล่นเพลงทั้งหมด ใช้แค่ Blob URL
+        // (เบากว่ามาก ไม่ต้อง encode/decode) — เก็บแค่ชื่อเพลง/ศิลปินไว้แทน
+        // เพื่อให้หน้า song.html โหลดไฟล์จาก IndexedDB เองได้ตรง ๆ
+        try {
+          sessionStorage.removeItem('currentAudioSrc');
+          sessionStorage.setItem('currentAudioType', mime);
+        } catch {}
         return;
       }
     } catch (e) { console.error(e); }
