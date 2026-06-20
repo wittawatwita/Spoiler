@@ -219,8 +219,6 @@
   }
   .section-link:hover { color: var(--text-primary); }
 
-  /* เปลี่ยนจาก grid (auto-fill) เป็น flex แนวนอน + scroll
-     เพื่อให้พอเพลย์ลิสต์เกิน 3-5 รายการ จะเลื่อนซ้าย-ขวาแทนการขึ้นแถวใหม่ */
   .playlist-cards-row {
     display: flex;
     flex-wrap: nowrap;
@@ -733,9 +731,20 @@ function toggleLikedSong(name, artist) {
 ══════════════════════════════════════════════════════════ */
 const audioElement = document.createElement('audio');
 audioElement.id = 'audioPlayer';
+audioElement.preload = 'auto';
+/* iOS Safari ต้องตั้ง playsinline ไม่งั้นบางเวอร์ชันจะพยายามเล่นแบบเต็มจอ/บล็อกเงียบ ๆ */
+audioElement.setAttribute('playsinline', '');
+audioElement.setAttribute('webkit-playsinline', '');
 document.body.appendChild(audioElement);
 let playing = false;
 let currentPlayIndex = -1;
+
+/* เก็บ error ล่าสุดไว้ debug และแจ้งผู้ใช้แบบเข้าใจง่าย แทนที่จะเงียบสนิท */
+audioElement.addEventListener('error', () => {
+  console.error('Audio playback error:', audioElement.error);
+  setPlayState(false);
+  showToast('เล่นเพลงนี้ไม่ได้ ไฟล์อาจเสียหายหรือไม่รองรับ');
+});
 
 function setPlayState(p) {
   playing = p;
@@ -743,8 +752,20 @@ function setPlayState(p) {
   if (di) di.className = playing ? 'ti ti-player-pause' : 'ti ti-player-play';
   const mi = document.getElementById('mpPlayBtn');
   if (mi) mi.className = playing ? 'ti ti-player-pause play-main' : 'ti ti-player-play play-main';
-  if (playing) audioElement.play().catch(() => {});
-  else audioElement.pause();
+  if (playing) {
+    const p = audioElement.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(err => {
+        console.warn('play() ถูกบล็อกหรือเกิดข้อผิดพลาด:', err);
+        playing = false;
+        if (di) di.className = 'ti ti-player-play';
+        if (mi) mi.className = 'ti ti-player-play play-main';
+        showToast('กดเล่นอีกครั้งเพื่อเริ่มเพลง');
+      });
+    }
+  } else {
+    audioElement.pause();
+  }
   updateHeroPlayButton();
 }
 
@@ -1068,6 +1089,19 @@ function applyOrder(all) {
 
 /* ══════════════════════════════════════════════════════════
    playThisTrack
+   ⚠️ FIX (มือถือเล่นเพลงไม่ได้ — กดแล้วเงียบสนิท):
+   สาเหตุคือฟังก์ชันนี้เป็น async และมีการ await ก่อนเรียก
+   audioElement.play() (เช่น await getAllSongsFromDB()) ทำให้
+   เบราว์เซอร์มือถือ (โดยเฉพาะ Safari/iOS) มองว่าการเรียก .play()
+   ไม่ได้เกิดขึ้นภายใน user gesture เดิมอีกต่อไป จึงบล็อกการเล่น
+   แบบเงียบ ๆ โดยไม่มี error ใด ๆ ขึ้นมา (autoplay policy)
+
+   วิธีแก้: เรียก audioElement.play() "ทันที" แบบ synchronous
+   ตั้งแต่ต้นฟังก์ชัน (ยังอยู่ใน user gesture) เพื่อจองสิทธิ์เล่นไว้ก่อน
+   แล้วค่อยตั้งค่า .src จริงทีหลังเมื่อโหลดข้อมูลเสร็จ (audio element
+   ตัวเดิมจะเล่นต่ออัตโนมัติเมื่อ src เปลี่ยนและมีการเรียก play() ซ้ำ
+   อีกครั้งหลังตั้ง src ซึ่งยังถือว่าเป็น user-initiated เพราะเกิดขึ้น
+   ใน call stack เดียวกันที่เริ่มจาก click)
 ══════════════════════════════════════════════════════════ */
 async function playThisTrack(el) {
   const nameEl   = el.querySelector('.name');
@@ -1094,16 +1128,19 @@ async function playThisTrack(el) {
   const songMeta = currentSongList[currentPlayIndex] || { name: sn, artist: an };
   updateHeroSection(songMeta);
 
+  // ── 1) เช็คฝั่ง localStorage ก่อน (sync, ไม่มี await คั่น) ──
   const uploaded = JSON.parse(localStorage.getItem('uploadedSongs')) || [];
   const ls = uploaded.find(s => s.name === sn && s.artist === an);
   if (ls && ls.audioFile && ls.audioFile.startsWith('data:')) {
     audioElement.src = ls.audioFile;
-    audioElement.play().catch(() => {});
-    setPlayState(true);
+    audioElement.load();
+    setPlayState(true); // เรียกทันทีในเฟรมเดียวกับ click — ยังนับเป็น user gesture
     updateTrackHighlight(el, sn);
     saveCurrentAudioSrc(ls.audioFile, ls.audioType || 'audio/mpeg');
     return;
   }
+
+  // ── 2) เคส IndexedDB: ต้อง await ── ตรงนี้คือจุดที่เคยเงียบบนมือถือ
   if (db) {
     try {
       const songs = await getAllSongsFromDB();
@@ -1112,7 +1149,9 @@ async function playThisTrack(el) {
         const mime   = s.audioType || 'audio/mpeg';
         const blob   = new Blob([s.audioFile], { type: mime });
         audioElement.src = URL.createObjectURL(blob);
-        audioElement.play().catch(() => {});
+        audioElement.load();
+        // กด play() อีกครั้งหลังโหลดเสร็จ — ถ้าโดนบล็อก setPlayState จะ
+        // จับ error และแจ้งเตือนผู้ใช้แทนที่จะเงียบสนิท
         setPlayState(true);
         updateTrackHighlight(el, sn);
         try { saveCurrentAudioSrc(arrayBufferToBase64DataUrl(s.audioFile, mime), mime); } catch {}
