@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SoundFlow — กำลังเล่น</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-primary: #121212;
+    --bg-secondary: #181818;
+    --bg-tertiary: #282828;
+    --text-primary: #ffffff;
+    --text-secondary: #b3b3b3;
+    --text-tertiary: #6a6a6a;
+    --accent: #1DB954;
+    --accent-hover: #1ed760;
+    --danger: #e74c3c;
+    --danger-hover: #c0392b;
+    --border: rgba(255,255,255,0.08);
+    --border-hover: rgba(255,255,255,0.15);
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 24px;
+    --sidebar-width: 240px;
+    --player-height: 90px;
+    --mobile-nav-height: 60px;
+    --font: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font);
+    font-size: 14px;
+    overflow: hidden;
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) 1fr;
+    grid-template-rows: 1fr var(--player-height);
+    height: 100vh;
+  }
+
+  .sidebar {
+    grid-row: 1 / 2; background: #000; border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .sidebar-logo { padding: 24px 20px 16px; display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 32px; height: 32px; background: var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .logo-icon i { font-size: 15px; color: #000; }
+  .logo-text { font-size: 16px; font-weight: 700; }
+  .sidebar-nav { padding: 0 12px 8px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: var(--radius-md);
+    cursor: pointer; transition: background 0.15s; text-decoration: none; color: inherit; margin-bottom: 2px;
+  }
+  .nav-item:hover { background: var(--bg-tertiary); }
+  .nav-item i { font-size: 20px; color: var(--text-secondary); }
+  .nav-item span { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+
+  .main {
+    grid-column: 2; overflow-y: auto;
+    background: linear-gradient(to bottom, #1e3a8a 0%, #0f172a 50%, var(--bg-primary) 100%);
+    scrollbar-width: thin; scrollbar-color: var(--bg-tertiary) transparent;
+  }
+
+  .main-header {
+    position: sticky; top: 0; z-index: 10;
+    padding: 16px 28px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .back-nav-btn {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--text-secondary); cursor: pointer; transition: color 0.2s; font-weight: 500;
+    text-decoration: none;
+  }
+  .back-nav-btn:hover { color: #fff; }
+
+  .delete-song-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 14px; border-radius: var(--radius-md);
+    background: rgba(231,76,60,0.1); border: 1px solid rgba(231,76,60,0.3);
+    color: var(--danger); cursor: pointer; font-size: 13px; font-weight: 600;
+    font-family: var(--font); transition: background 0.2s, border-color 0.2s;
+  }
+  .delete-song-btn:hover { background: rgba(231,76,60,0.2); border-color: rgba(231,76,60,0.6); color: #ff6b6b; }
+  .delete-song-btn:active { transform: scale(0.97); }
+  .delete-song-btn i { font-size: 17px; }
+
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; z-index: 999;
+    background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: #1e1e1e; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: var(--radius-xl); padding: 28px 32px; width: 340px; max-width: 90vw;
+    text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  }
+  .modal-icon-wrap {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: rgba(231,76,60,0.12); border: 1px solid rgba(231,76,60,0.3);
+    display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;
+  }
+  .modal-icon-wrap i { font-size: 24px; color: var(--danger); }
+  .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+  .modal-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 24px; }
+  .modal-song-name { color: #fff; font-weight: 600; }
+  .modal-actions { display: flex; gap: 10px; }
+  .modal-btn {
+    flex: 1; padding: 10px; border-radius: var(--radius-md); font-size: 14px;
+    font-weight: 600; cursor: pointer; font-family: var(--font); border: none; transition: opacity 0.2s, transform 0.1s;
+  }
+  .modal-btn:active { transform: scale(0.97); }
+  .modal-btn-cancel { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.1); }
+  .modal-btn-cancel:hover { background: #333; color: #fff; }
+  .modal-btn-confirm { background: var(--danger); color: #fff; }
+  .modal-btn-confirm:hover { background: var(--danger-hover); }
+
+  /* Playlist modal */
+  .pl-modal-box {
+    background: #1e1e1e; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: var(--radius-xl); padding: 24px; width: 360px; max-width: 90vw;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  }
+  .pl-modal-title { font-size: 17px; font-weight: 700; margin-bottom: 16px; }
+  .pl-list { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .pl-list::-webkit-scrollbar { width: 4px; }
+  .pl-list::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 2px; }
+  .pl-item {
+    display: flex; align-items: center; justify-content: space-between; padding: 10px 12px;
+    border-radius: var(--radius-md); cursor: pointer; background: var(--bg-tertiary); transition: background 0.15s;
+  }
+  .pl-item:hover { background: #333; }
+  .pl-item-name { font-size: 13px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pl-item-count { font-size: 11px; color: var(--text-secondary); flex-shrink: 0; margin-left: 8px; }
+  .pl-item.added { background: rgba(29,185,84,0.12); border: 1px solid rgba(29,185,84,0.3); }
+  .pl-item.added .pl-item-name { color: var(--accent); }
+  .pl-empty { font-size: 12px; color: var(--text-secondary); text-align: center; padding: 16px 0; line-height: 1.6; }
+  .pl-empty-link {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+    color: var(--accent); font-weight: 600; text-decoration: none; font-size: 12px;
+  }
+  .pl-empty-link:hover { color: var(--accent-hover); }
+  .pl-close-btn {
+    margin-top: 14px; width: 100%; padding: 10px; border-radius: var(--radius-md);
+    background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.1);
+    font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font);
+  }
+  .pl-close-btn:hover { background: #333; color: #fff; }
+  .pl-toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: #1e1e1e; border: 1px solid rgba(29,185,84,0.4); color: #fff;
+    padding: 10px 20px; border-radius: var(--radius-md); font-size: 13px; font-weight: 600;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.5); z-index: 1100; opacity: 0; pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s; display: flex; align-items: center; gap: 8px;
+  }
+  .pl-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .pl-toast i { color: var(--accent); font-size: 16px; }
+
+  .player-content-container {
+    padding: 10px 40px 40px;
+    display: grid;
+    grid-template-columns: minmax(320px, 400px) 1fr;
+    gap: 48px;
+    align-items: flex-start;
+  }
+
+  .player-core-zone { display: flex; flex-direction: column; align-items: center; width: 100%; }
+
+  .big-album-art {
+    width: 100%; aspect-ratio: 1;
+    background: linear-gradient(135deg, #1e40af, #3b82f6);
+    border-radius: var(--radius-xl);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 28px 60px rgba(0,0,0,0.6); position: relative; margin-bottom: 24px;
+    border: 1px solid rgba(255,255,255,0.1);
+    overflow: hidden;
+  }
+  .big-album-art > i { font-size: 120px; color: rgba(255,255,255,0.8); position: relative; z-index: 1; }
+  .big-album-art .cover-real {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    border-radius: var(--radius-xl);
+  }
+  .big-album-art.has-cover > i { display: none; }
+  .big-album-art.has-cover::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(to bottom, transparent 60%, rgba(0,0,0,0.25));
+    border-radius: var(--radius-xl);
+    pointer-events: none;
+  }
+
+  .track-meta-wrap { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0 4px; margin-bottom: 20px; }
+  .track-title-big { font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 4px; }
+  .track-artist-big { font-size: 15px; color: var(--text-secondary); font-weight: 500; }
+  .track-heart-btn { font-size: 24px; color: var(--accent); cursor: pointer; flex-shrink: 0; margin-left: 12px; }
+  .track-addlist-btn { font-size: 24px; color: var(--text-secondary); cursor: pointer; flex-shrink: 0; margin-left: 12px; transition: color 0.15s; }
+  .track-addlist-btn:hover { color: #fff; }
+  .track-addlist-btn.has-playlists { color: var(--accent); }
+
+  .main-progress-wrap { width: 100%; margin-bottom: 24px; }
+  .main-bar { width: 100%; height: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; cursor: pointer; position: relative; }
+  .main-bar-fill { width: 0%; height: 100%; background: var(--accent); border-radius: 3px; pointer-events: none; }
+  .main-bar-thumb {
+    width: 14px; height: 14px; background: #fff; border-radius: 50%;
+    position: absolute; right: -7px; top: 50%; transform: translateY(-50%);
+    opacity: 0; transition: opacity 0.15s; pointer-events: none;
+  }
+  .main-bar:hover .main-bar-thumb { opacity: 1; }
+  .main-times { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--text-secondary); }
+
+  .main-control-buttons {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; padding: 0 10px; margin-bottom: 12px;
+  }
+  .control-icon {
+    font-size: 22px; color: var(--text-secondary); cursor: pointer;
+    transition: color 0.15s, transform 0.1s; display: flex; flex-direction: column; align-items: center;
+  }
+  .control-icon:hover { color: #fff; }
+  .control-icon:active { transform: scale(0.95); }
+  .control-icon.active { color: var(--accent); }
+  .control-icon.active::after { content: ''; display: block; width: 4px; height: 4px; background: var(--accent); border-radius: 50%; margin-top: 2px; }
+
+  .main-play-trigger {
+    width: 60px; height: 60px; background: #fff; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; color: #000;
+    transition: transform 0.2s, background 0.2s; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+  .main-play-trigger:hover { transform: scale(1.05); background: var(--accent-hover); }
+  .main-play-trigger i { font-size: 24px; }
+
+  .queue-zone-panel {
+    background: rgba(0,0,0,0.25); backdrop-filter: blur(20px);
+    border: 1px solid var(--border); border-radius: var(--radius-xl);
+    height: 480px; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .queue-panel-header {
+    padding: 16px 24px; background: rgba(0,0,0,0.15);
+    border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 700; letter-spacing: 0.5px;
+  }
+  .queue-scroll-content { flex: 1; overflow-y: auto; padding: 20px; }
+  .queue-scroll-content::-webkit-scrollbar { width: 4px; }
+  .queue-scroll-content::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 2px; }
+
+  .queue-group { display: flex; flex-direction: column; gap: 4px; }
+  .queue-label-text { font-size: 11px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; margin: 12px 0 6px 4px; }
+  .queue-label-text:first-child { margin-top: 0; }
+
+  .q-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: var(--radius-md); transition: background 0.15s; }
+  .q-item:hover { background: rgba(255,255,255,0.04); }
+  .q-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .q-img {
+    width: 38px; height: 38px; background: rgba(255,255,255,0.06);
+    border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0; overflow: hidden;
+  }
+  .q-img img { width: 38px; height: 38px; object-fit: cover; border-radius: var(--radius-sm); display: block; }
+  .q-meta { min-width: 0; }
+  .q-name { font-size: 13px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .q-artist { font-size: 11px; color: var(--text-secondary); margin-top: 1px; }
+  .q-dur { font-size: 12px; color: var(--text-secondary); flex-shrink: 0; margin-left: 8px; }
+
+  .player-bar {
+    grid-column: 1 / 3; background: #0a0a0a; border-top: 1px solid var(--border);
+    display: grid; grid-template-columns: 280px 1fr 220px; align-items: center; padding: 0 24px;
+  }
+  .player-bar-left { display: flex; align-items: center; color: var(--text-secondary); font-size: 12px; }
+
+  .bottom-nav { display: none; }
+
+  @media (max-width: 768px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: 1fr var(--mobile-nav-height); height: 100vh; }
+    .sidebar, .player-bar { display: none; }
+    .main { grid-column: 1; grid-row: 1 / 2; padding-bottom: 80px; }
+    .main-header { padding: 16px; }
+    .player-content-container { grid-template-columns: 1fr; gap: 32px; padding: 12px 16px; }
+    .big-album-art { width: min(240px, 65vw); margin-left: auto; margin-right: auto; }
+    .big-album-art > i { font-size: 80px; }
+    .track-title-big { font-size: 20px; }
+    .track-artist-big { font-size: 14px; }
+    .queue-zone-panel { height: 300px; }
+    .delete-song-btn span { display: none; }
+    .delete-song-btn { padding: 8px 10px; }
+    .bottom-nav { display: flex; position: fixed; bottom: 0; left: 0; right: 0; height: var(--mobile-nav-height); background: #000; border-top: 1px solid var(--border); z-index: 101; }
+    .bn-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-decoration: none; color: inherit; }
+    .bn-item i { font-size: 22px; color: var(--text-tertiary); }
+    .bn-item span { font-size: 10px; color: var(--text-tertiary); }
+    .bn-item.active i, .bn-item.active span { color: var(--text-primary); }
+  }
+</style>
+</head>
+<body>
+
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal-box">
+    <div class="modal-icon-wrap"><i class="ti ti-trash"></i></div>
+    <div class="modal-title">ลบเพลงนี้?</div>
+    <div class="modal-desc">
+      คุณต้องการลบ <span class="modal-song-name" id="modalSongName"></span> ออกจากคลังเพลงใช่ไหม?<br>การกระทำนี้ไม่สามารถยกเลิกได้
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn modal-btn-cancel" onclick="closeDeleteModal()">ยกเลิก</button>
+      <button class="modal-btn modal-btn-confirm" onclick="confirmDelete()">
+        <i class="ti ti-trash" style="font-size:15px;vertical-align:-2px;margin-right:4px;"></i>ลบเพลง
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="playlistModal">
+  <div class="pl-modal-box">
+    <div class="pl-modal-title">เพิ่มลงเพลย์ลิสต์</div>
+    <div class="pl-list" id="playlistList"></div>
+    <button class="pl-close-btn" onclick="closePlaylistModal()">ปิด</button>
+  </div>
+</div>
+
+<div class="pl-toast" id="plToast">
+  <i class="ti ti-circle-check-filled"></i>
+  <span id="plToastText"></span>
+</div>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon"><i class="ti ti-player-play"></i></div>
+      <span class="logo-text">SoundFlow</span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="index.html" class="nav-item"><i class="ti ti-home"></i><span>หน้าแรก</span></a>
+      <a href="ค้นหาเพลง.html" class="nav-item"><i class="ti ti-search"></i><span>ค้นหา</span></a>
+      <a href="คลังเพลง.html" class="nav-item"><i class="ti ti-library"></i><span>คลังเพลง</span></a>
+    </nav>
+  </aside>
+
+  <main class="main" id="mainEl">
+    <header class="main-header">
+      <a href="javascript:history.back()" class="back-nav-btn">
+        <i class="ti ti-chevron-left" style="font-size:20px;"></i>
+        <span>ย้อนกลับ</span>
+      </a>
+      <button class="delete-song-btn" onclick="openDeleteModal()">
+        <i class="ti ti-trash"></i>
+        <span>ลบเพลง</span>
+      </button>
+    </header>
+
+    <div class="player-content-container">
+      <div class="player-core-zone">
+        <div class="big-album-art" id="bigAlbumArt">
+          <img class="cover-real" id="coverRealImg" src="" alt="album cover" style="display:none;">
+          <i class="ti ti-wave-sine"></i>
+        </div>
+
+        <div class="track-meta-wrap">
+          <div class="track-main-info">
+            <div class="track-title-big" id="currentSongTitle">-</div>
+            <div class="track-artist-big" id="currentArtistName">กำลังโหลด...</div>
+          </div>
+          <div class="track-addlist-btn" id="addlistBtn" onclick="openPlaylistModal()" title="เพิ่มลงเพลย์ลิสต์">
+            <i class="ti ti-playlist-add"></i>
+          </div>
+          <div class="track-heart-btn" id="heartBtn" onclick="toggleHeart(this)" title="เพิ่มลงเพลงที่ชอบ">
+            <i class="ti ti-heart"></i>
+          </div>
+        </div>
+
+        <div class="main-progress-wrap">
+          <div class="main-bar" id="mainBar">
+            <div class="main-bar-fill" id="mainBarFill"></div>
+            <div class="main-bar-thumb" id="mainBarThumb"></div>
+          </div>
+          <div class="main-times">
+            <span id="timeCurrentEl">0:00</span>
+            <span id="timeTotalEl">0:00</span>
+          </div>
+        </div>
+
+        <div class="main-control-buttons">
+          <div class="control-icon" id="shuffleBtn" onclick="toggleShuffle(this)">
+            <i class="ti ti-arrows-shuffle"></i>
+          </div>
+          <div class="control-icon" id="prevBtn" onclick="prevSong()">
+            <i class="ti ti-player-skip-back"></i>
+          </div>
+          <div class="main-play-trigger" id="mainPlayBtn" onclick="togglePlay()">
+            <i class="ti ti-player-play"></i>
+          </div>
+          <div class="control-icon" onclick="nextSong()">
+            <i class="ti ti-player-skip-forward"></i>
+          </div>
+          <div class="control-icon" id="repeatBtn" onclick="cycleRepeat(this)">
+            <i class="ti ti-repeat"></i>
+          </div>
+        </div>
+      </div>
+
+      <div class="queue-zone-panel">
+        <div class="queue-panel-header">คิวเพลงที่กำลังจะเล่น</div>
+        <div class="queue-scroll-content">
+          <div class="queue-group" id="queueGroup"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="player-bar">
+    <div class="player-bar-left">SoundFlow — Now Playing</div>
+  </footer>
+</div>
+
+<nav class="bottom-nav">
+  <a href="index.html" class="bn-item"><i class="ti ti-home"></i><span>หน้าแรก</span></a>
+  <a href="ค้นหาเพลง.html" class="bn-item"><i class="ti ti-search"></i><span>ค้นหา</span></a>
+  <a href="คลังเพลง.html" class="bn-item active"><i class="ti ti-library"></i><span>คลัง</span></a>
+</nav>
+
+<script>
+  const audioElement = document.createElement('audio');
+  audioElement.id = 'audioPlayer';
+  document.body.appendChild(audioElement);
+
+  let isPlaying  = false;
+  let isShuffle  = false;
+  let repeatMode = 0; // 0=off 1=all 2=one
+
+  let playlist     = [];   // เรียงตาม order เดียวกับหน้าสวยดี
+  let currentIndex = 0;
+
+  /* ══════════════════════════════════════════════════════════
+     Song Order — อ่าน key เดียวกับหน้าสวยดี.html
+  ══════════════════════════════════════════════════════════ */
+  const ORDER_KEY = 'soundflow_song_order';
+
+  function loadSavedOrder() {
+    try { return JSON.parse(localStorage.getItem(ORDER_KEY)) || []; }
+    catch { return []; }
+  }
+
+  /**
+   * เรียง all[] ตาม saved order
+   * ถ้าไม่มี order บันทึกไว้ คืนค่าตามเดิม
+   */
+  function applyOrder(all) {
+    const saved = loadSavedOrder();
+    if (!saved.length) return all;
+    const out = [];
+    saved.forEach(({ name, artist }) => {
+      const f = all.find(s => s.title === name && (s.artist || '') === (artist || ''));
+      if (f) out.push(f);
+    });
+    // เพลงที่ไม่มีใน order (เพิ่งเพิ่มใหม่) ต่อท้าย
+    all.forEach(s => {
+      if (!out.some(o => o.title === s.title && o.artist === s.artist)) out.push(s);
+    });
+    return out;
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     Liked Songs — เก็บเพลงที่กดหัวใจ (ใช้ key เดียวกันทั้งแอป)
+  ══════════════════════════════════════════════════════════ */
+  const LIKED_KEY = 'sf_liked_songs';
+
+  function loadLikedSongs() {
+    try { return JSON.parse(localStorage.getItem(LIKED_KEY)) || []; }
+    catch { return []; }
+  }
+
+  function saveLikedSongs(list) {
+    localStorage.setItem(LIKED_KEY, JSON.stringify(list));
+  }
+
+  function isSongLiked(name, artist) {
+    return loadLikedSongs().some(s => s.name === name && (s.artist || '') === (artist || ''));
+  }
+
+  /** toggle และคืนค่าสถานะใหม่ (true = ถูกใจแล้ว) */
+  function toggleLikedSong(name, artist) {
+    const list = loadLikedSongs();
+    const idx  = list.findIndex(s => s.name === name && (s.artist || '') === (artist || ''));
+    let liked;
+    if (idx !== -1) {
+      list.splice(idx, 1);
+      liked = false;
+    } else {
+      list.push({ name, artist: artist || '' });
+      liked = true;
+    }
+    saveLikedSongs(list);
+    return liked;
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     IndexedDB
+  ══════════════════════════════════════════════════════════ */
+  let db = null;
+  const dbRequest = indexedDB.open('SoundFlowDB', 1);
+  dbRequest.onupgradeneeded = (e) => {
+    db = e.target.result;
+    if (!db.objectStoreNames.contains('songs'))
+      db.createObjectStore('songs', { keyPath: 'id', autoIncrement: true });
+  };
+  dbRequest.onsuccess = (e) => { db = e.target.result; };
+
+  function getAllSongsFromDB() {
+    return new Promise((resolve, reject) => {
+      if (!db) return resolve([]);
+      const tx  = db.transaction(['songs'], 'readonly');
+      const req = tx.objectStore('songs').getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror   = () => reject(req.error);
+    });
+  }
+
+  function getSongFromDB(songName, artistName) {
+    return new Promise(async (resolve) => {
+      try {
+        const songs = await getAllSongsFromDB();
+        resolve(songs.find(s => s.name === songName && s.artist === artistName) || null);
+      } catch { resolve(null); }
+    });
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     Cover helpers
+  ══════════════════════════════════════════════════════════ */
+  function getCoverSrc(songName, artistName) {
+    return localStorage.getItem(`cover_${songName}_${artistName}`) || null;
+  }
+
+  async function getCoverSrcAsync(songName, artistName) {
+    const ls = getCoverSrc(songName, artistName);
+    if (ls) return ls;
+    try {
+      const idbSong = await getSongFromDB(songName, artistName);
+      if (idbSong && idbSong.coverImage) return idbSong.coverImage;
+    } catch {}
+    return null;
+  }
+
+  function setAlbumArt(coverSrc) {
+    const artBox   = document.getElementById('bigAlbumArt');
+    const coverImg = document.getElementById('coverRealImg');
+    if (coverSrc) {
+      coverImg.src = coverSrc;
+      coverImg.style.display = 'block';
+      artBox.classList.add('has-cover');
+      artBox.style.background = 'transparent';
+    } else {
+      coverImg.src = '';
+      coverImg.style.display = 'none';
+      artBox.classList.remove('has-cover');
+      artBox.style.background = '';
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     Helpers
+  ══════════════════════════════════════════════════════════ */
+  function fmtTime(secs) {
+    if (!secs || isNaN(secs)) return '0:00';
+    return `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`;
+  }
+
+  function setPlayIcon(p) {
+    const icon = document.querySelector('#mainPlayBtn i');
+    if (icon) icon.className = p ? 'ti ti-player-pause' : 'ti ti-player-play';
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     Progress Bar
+  ══════════════════════════════════════════════════════════ */
+  const mainBar     = document.getElementById('mainBar');
+  const mainBarFill = document.getElementById('mainBarFill');
+  let barDragging   = false;
+
+  audioElement.addEventListener('timeupdate', () => {
+    if (barDragging || !audioElement.duration) return;
+    const pct = (audioElement.currentTime / audioElement.duration) * 100;
+    mainBarFill.style.width = pct + '%';
+    document.getElementById('mainBarThumb').style.left = `calc(${pct}% - 7px)`;
+    document.getElementById('timeCurrentEl').textContent = fmtTime(audioElement.currentTime);
+    document.getElementById('timeTotalEl').textContent   = fmtTime(audioElement.duration);
+  });
+
+  audioElement.addEventListener('loadedmetadata', () => {
+    document.getElementById('timeTotalEl').textContent = fmtTime(audioElement.duration);
+  });
+
+  /* เพลงจบ → เล่นถัดไปวนลูป */
+  audioElement.addEventListener('ended', () => {
+    if (repeatMode === 2) {
+      audioElement.currentTime = 0;
+      audioElement.play().catch(() => {});
+    } else {
+      currentIndex = isShuffle
+        ? Math.floor(Math.random() * playlist.length)
+        : (currentIndex + 1) % playlist.length;
+      loadAndPlayIndex(currentIndex);
+    }
+  });
+
+  function seekFromPointer(clientX) {
+    const rect = mainBar.getBoundingClientRect();
+    const pct  = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    if (audioElement.duration) {
+      audioElement.currentTime = pct * audioElement.duration;
+      mainBarFill.style.width  = (pct * 100) + '%';
+      document.getElementById('mainBarThumb').style.left = `calc(${pct * 100}% - 7px)`;
+      document.getElementById('timeCurrentEl').textContent = fmtTime(audioElement.currentTime);
+    }
+  }
+
+  if (mainBar) {
+    mainBar.addEventListener('mousedown', (e) => { barDragging = true;  seekFromPointer(e.clientX); });
+    mainBar.addEventListener('mousemove', (e) => { if (barDragging) seekFromPointer(e.clientX); });
+    document.addEventListener('mouseup',  ()  => { barDragging = false; });
+    mainBar.addEventListener('touchstart',(e) => { barDragging = true;  seekFromPointer(e.touches[0].clientX); }, { passive: true });
+    mainBar.addEventListener('touchmove', (e) => { if (barDragging) seekFromPointer(e.touches[0].clientX); }, { passive: true });
+    document.addEventListener('touchend', ()  => { barDragging = false; });
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     Controls
+  ══════════════════════════════════════════════════════════ */
+  function togglePlay() {
+    isPlaying = !isPlaying;
+    setPlayIcon(isPlaying);
+    if (isPlaying) audioElement.play().catch(() => {});
+    else audioElement.pause();
+  }
+
+  function toggleShuffle(el) {
+    isShuffle = !isShuffle;
+    el.classList.toggle('active', isShuffle);
+  }
+
+  function cycleRepeat(el) {
+    repeatMode = (repeatMode + 1) % 3;
+    el.classList.toggle('active', repeatMode > 0);
+    el.querySelector('i').className = repeatMode === 2 ? 'ti ti-repeat-once' : 'ti ti-repeat';
+  }
+
+  /* ปุ่มหัวใจ — กดแล้วเพิ่ม/นำเพลงออกจาก "เพลงที่ชอบ" และจำสถานะไว้ */
+  function toggleHeart(el) {
+    if (!playlist.length) return;
+    const song = playlist[currentIndex];
+    if (!song) return;
+
+    const liked = toggleLikedSong(song.title, song.artist);
+    applyHeartIcon(el, liked);
+    showPlToast(liked
+      ? `เพิ่ม "${song.title}" ลงเพลงที่ชอบแล้ว`
+      : `นำ "${song.title}" ออกจากเพลงที่ชอบแล้ว`);
+  }
+
+  function applyHeartIcon(el, liked) {
+    const icon = el.querySelector('i');
+    icon.className   = liked ? 'ti ti-heart-filled' : 'ti ti-heart';
+    icon.style.color = liked ? 'var(--accent)' : 'var(--text-secondary)';
+  }
+
+  /* อัปเดตหัวใจให้ตรงกับสถานะจริงของเพลงที่กำลังเล่นอยู่ */
+  function updateHeartBtnState() {
+    const btn = document.getElementById('heartBtn');
+    if (!btn || !playlist.length) return;
+    const song = playlist[currentIndex];
+    if (!song) return;
+    applyHeartIcon(btn, isSongLiked(song.title, song.artist));
+  }
+
+  function nextSong() {
+    if (!playlist.length) return;
+    currentIndex = isShuffle
+      ? Math.floor(Math.random() * playlist.length)
+      : (currentIndex + 1) % playlist.length;
+    loadAndPlayIndex(currentIndex);
+  }
+
+  function prevSong() {
+    if (!playlist.length) return;
+    // ถ้าเล่นมาแล้วเกิน 3 วิ → เริ่มเพลงปัจจุบันใหม่
+    if (audioElement.currentTime > 3) {
+      audioElement.currentTime = 0;
+      return;
+    }
+    currentIndex = isShuffle
+      ? Math.floor(Math.random() * playlist.length)
+      : (currentIndex - 1 + playlist.length) % playlist.length;
+    loadAndPlayIndex(currentIndex);
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     Queue Display
+  ══════════════════════════════════════════════════════════ */
+  function renderQueue() {
+    const group = document.getElementById('queueGroup');
+    if (!group || !playlist.length) return;
+    group.innerHTML = '';
+
+    const nowSong  = playlist[currentIndex];
+    const nowCover = getCoverSrc(nowSong.title, nowSong.artist);
+
+    const nowLabel = document.createElement('span');
+    nowLabel.className   = 'queue-label-text';
+    nowLabel.textContent = 'กำลังเล่นอยู่';
+    group.appendChild(nowLabel);
+
+    const nowItem = document.createElement('div');
+    nowItem.className = 'q-item';
+    nowItem.style.cssText = 'background:rgba(29,185,84,0.08);border:1px solid rgba(29,185,84,0.15);';
+    nowItem.innerHTML = `
+      <div class="q-left">
+        <div class="q-img" style="color:var(--accent);">
+          ${nowCover ? `<img src="${nowCover}" alt="">` : `<i class="ti ti-player-play-filled"></i>`}
+        </div>
+        <div class="q-meta">
+          <div class="q-name" style="color:var(--accent);">${nowSong.title}</div>
+          <div class="q-artist">${nowSong.artist}</div>
+        </div>
+      </div>
+      <span class="q-dur" style="color:var(--accent);">${nowSong.duration || '0:00'}</span>
+    `;
+    group.appendChild(nowItem);
+
+    if (playlist.length > 1) {
+      const nextLabel = document.createElement('span');
+      nextLabel.className   = 'queue-label-text';
+      nextLabel.textContent = 'เพลงถัดไปในคิว';
+      group.appendChild(nextLabel);
+
+      for (let i = 1; i < Math.min(playlist.length, 6); i++) {
+        const song  = playlist[(currentIndex + i) % playlist.length];
+        const cover = getCoverSrc(song.title, song.artist);
+        const item  = document.createElement('div');
+        item.className = 'q-item';
+        item.innerHTML = `
+          <div class="q-left">
+            <div class="q-img">
+              ${cover ? `<img src="${cover}" alt="">` : `<i class="ti ti-music"></i>`}
+            </div>
+            <div class="q-meta">
+              <div class="q-name">${song.title}</div>
+              <div class="q-artist">${song.artist}</div>
+            </div>
+          </div>
+          <span class="q-dur">${song.duration || '0:00'}</span>
+        `;
+        item.style.cursor = 'pointer';
+        item.addEventListener('click', () => {
+          currentIndex = (currentIndex + i) % playlist.length;
+          loadAndPlayIndex(currentIndex);
+        });
+        group.appendChild(item);
+      }
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     Playlists — เลือกเพลย์ลิสต์จากหน้าคลังเพลง (sf_playlists)
+  ══════════════════════════════════════════════════════════ */
+  const PLAYLISTS_KEY = 'sf_playlists';
+
+  function loadPlaylists() {
+    try { return JSON.parse(localStorage.getItem(PLAYLISTS_KEY)) || []; }
+    catch { return []; }
+  }
+
+  function savePlaylists(playlists) {
+    localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(playlists));
+  }
+
+  function getCurrentSongRef() {
+    const song = playlist[currentIndex];
+    return { name: song.title, artist: song.artist || '' };
+  }
+
+  function isSongInPlaylist(songs, ref) {
+    return (songs || []).some(s => s.name === ref.name && (s.artist || '') === ref.artist);
+  }
+
+  function openPlaylistModal() {
+    renderPlaylistList();
+    document.getElementById('playlistModal').classList.add('show');
+  }
+
+  function closePlaylistModal() {
+    document.getElementById('playlistModal').classList.remove('show');
+  }
+
+  function renderPlaylistList() {
+    const container = document.getElementById('playlistList');
+    const playlists = loadPlaylists();
+    const ref = getCurrentSongRef();
+
+    container.innerHTML = '';
+
+    if (!playlists.length) {
+      const empty = document.createElement('div');
+      empty.className = 'pl-empty';
+      empty.innerHTML = `ยังไม่มีเพลย์ลิสต์<br>
+        <a class="pl-empty-link" href="เพลย์ลิสต์.html"><i class="ti ti-plus"></i> สร้างเพลย์ลิสต์ใหม่</a>`;
+      container.appendChild(empty);
+      return;
+    }
+
+    playlists.forEach(pl => {
+      const songs = pl.songs || [];
+      const added = isSongInPlaylist(songs, ref);
+
+      const item = document.createElement('div');
+      item.className = 'pl-item' + (added ? ' added' : '');
+
+      const coverHtml = pl.cover
+        ? `<img src="${pl.cover}" alt="" style="width:32px;height:32px;border-radius:var(--radius-sm);object-fit:cover;margin-right:10px;vertical-align:-9px;">`
+        : `<i class="ti ${added ? 'ti-circle-check-filled' : 'ti-playlist'}" style="margin-right:8px;vertical-align:-2px;"></i>`;
+
+      item.innerHTML = `
+        <div class="pl-item-name">${coverHtml}${pl.name}</div>
+        <span class="pl-item-count">${songs.length} เพลง</span>
+      `;
+      item.addEventListener('click', () => togglePlaylistMembership(pl.id));
+      container.appendChild(item);
+    });
+  }
+
+  function togglePlaylistMembership(playlistId) {
+    const playlists = loadPlaylists();
+    const pl = playlists.find(p => String(p.id) === String(playlistId));
+    if (!pl) return;
+
+    pl.songs = pl.songs || [];
+    const ref = getCurrentSongRef();
+    const idx = pl.songs.findIndex(s => s.name === ref.name && (s.artist || '') === ref.artist);
+
+    let added;
+    if (idx !== -1) {
+      pl.songs.splice(idx, 1);
+      added = false;
+    } else {
+      pl.songs.push({ name: ref.name, artist: ref.artist });
+      added = true;
+    }
+
+    savePlaylists(playlists);
+    renderPlaylistList();
+    updateAddlistBtnState();
+    showPlToast(added
+      ? `เพิ่ม "${ref.name}" ลง "${pl.name}" แล้ว`
+      : `นำ "${ref.name}" ออกจาก "${pl.name}" แล้ว`);
+  }
+
+  /* แสดงสถานะปุ่มเพิ่มเพลย์ลิสต์ ถ้าเพลงนี้อยู่ในเพลย์ลิสต์ใดอยู่แล้ว ให้ติดสี accent */
+  function updateAddlistBtnState() {
+    const btn = document.getElementById('addlistBtn');
+    if (!btn || !playlist.length) return;
+    const playlists = loadPlaylists();
+    const ref = getCurrentSongRef();
+    const inAny = playlists.some(pl => isSongInPlaylist(pl.songs, ref));
+    btn.classList.toggle('has-playlists', inAny);
+  }
+
+  /* Toast เล็กๆ แจ้งผลการเพิ่ม/นำออก */
+  let plToastTimer = null;
+  function showPlToast(text) {
+    const toast = document.getElementById('plToast');
+    document.getElementById('plToastText').textContent = text;
+    toast.classList.add('show');
+    clearTimeout(plToastTimer);
+    plToastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+  }
+
+  document.getElementById('playlistModal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('playlistModal')) closePlaylistModal();
+  });
+
+  /* ══════════════════════════════════════════════════════════
+     Load & Play by Index
+  ══════════════════════════════════════════════════════════ */
+  async function loadAndPlayIndex(index) {
+    if (index < 0 || index >= playlist.length) return;
+    const song   = playlist[index];
+    currentIndex = index;
+
+    document.getElementById('currentSongTitle').innerText  = song.title;
+    document.getElementById('currentArtistName').innerText = song.artist;
+
+    localStorage.setItem('currentSongName',   song.title);
+    localStorage.setItem('currentArtistName', song.artist);
+    sessionStorage.removeItem('currentAudioSrc');
+
+    const coverSrc = await getCoverSrcAsync(song.title, song.artist);
+    setAlbumArt(coverSrc);
+    renderQueue();
+    updateAddlistBtnState();
+    updateHeartBtnState();
+
+    let audioSrc = null;
+
+    const lsSongs = JSON.parse(localStorage.getItem('uploadedSongs')) || [];
+    const lsSong  = lsSongs.find(s => s.name === song.title && s.artist === song.artist);
+    if (lsSong && lsSong.audioFile && lsSong.audioFile.startsWith('data:')) {
+      audioSrc = lsSong.audioFile;
+    }
+
+    if (!audioSrc) {
+      const idbSong = await getSongFromDB(song.title, song.artist);
+      if (idbSong && idbSong.audioFile) {
+        const mime = idbSong.audioType || 'audio/mpeg';
+        const blob = new Blob([idbSong.audioFile], { type: mime });
+        audioSrc   = URL.createObjectURL(blob);
+      }
+    }
+
+    if (audioSrc) {
+      audioElement.src = audioSrc;
+      audioElement.currentTime = 0;
+      audioElement.play().then(() => {
+        isPlaying = true;
+        setPlayIcon(true);
+      }).catch(() => {
+        isPlaying = false;
+        setPlayIcon(false);
+      });
+    } else {
+      isPlaying = false;
+      setPlayIcon(false);
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     Delete Song
+  ══════════════════════════════════════════════════════════ */
+  function openDeleteModal() {
+    document.getElementById('modalSongName').textContent = document.getElementById('currentSongTitle').innerText;
+    document.getElementById('deleteModal').classList.add('show');
+  }
+  function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.remove('show');
+  }
+  document.getElementById('deleteModal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('deleteModal')) closeDeleteModal();
+  });
+
+  function confirmDelete() {
+    const songTitle  = document.getElementById('currentSongTitle').innerText;
+    const songArtist = document.getElementById('currentArtistName').innerText;
+
+    const lsSongs = JSON.parse(localStorage.getItem('uploadedSongs')) || [];
+    const lsIdx   = lsSongs.findIndex(s => s.name === songTitle && s.artist === songArtist);
+    if (lsIdx !== -1) {
+      lsSongs.splice(lsIdx, 1);
+      localStorage.setItem('uploadedSongs', JSON.stringify(lsSongs));
+    }
+    localStorage.removeItem(`cover_${songTitle}_${songArtist}`);
+
+    // ลบออกจาก ORDER_KEY ด้วย
+    const savedOrder = loadSavedOrder().filter(o => !(o.name === songTitle && o.artist === songArtist));
+    localStorage.setItem(ORDER_KEY, JSON.stringify(savedOrder));
+
+    // ลบออกจากเพลย์ลิสต์ทั้งหมดด้วย
+    const playlists = loadPlaylists();
+    playlists.forEach(pl => {
+      pl.songs = (pl.songs || []).filter(s => !(s.name === songTitle && (s.artist || '') === songArtist));
+    });
+    savePlaylists(playlists);
+
+    // ลบออกจากเพลงที่ชอบด้วย
+    const likedList = loadLikedSongs().filter(s => !(s.name === songTitle && (s.artist || '') === songArtist));
+    saveLikedSongs(likedList);
+
+    if (db) {
+      getAllSongsFromDB().then(songs => {
+        const target = songs.find(s => s.name === songTitle && s.artist === songArtist);
+        if (target) {
+          const tx = db.transaction(['songs'], 'readwrite');
+          tx.objectStore('songs').delete(target.id);
+        }
+      });
+    }
+
+    playlist.splice(currentIndex, 1);
+    closeDeleteModal();
+
+    if (playlist.length > 0) {
+      currentIndex = Math.min(currentIndex, playlist.length - 1);
+      loadAndPlayIndex(currentIndex);
+    } else {
+      audioElement.pause();
+      history.back();
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     Init — สร้าง playlist ตาม order ของหน้าสวยดี
+  ══════════════════════════════════════════════════════════ */
+  document.addEventListener('DOMContentLoaded', async () => {
+    await new Promise(r => setTimeout(r, 150));
+
+    repeatMode = 0;
+    const repeatBtn = document.getElementById('repeatBtn');
+    if (repeatBtn) {
+      repeatBtn.classList.remove('active');
+      repeatBtn.querySelector('i').className = 'ti ti-repeat';
+    }
+
+    const songName      = localStorage.getItem('currentSongName');
+    const artistName    = localStorage.getItem('currentArtistName');
+    const savedPlayTime = parseFloat(localStorage.getItem('currentPlayTime') || '0');
+
+    /* ── รวมเพลงจากทุกแหล่ง (ป้องกัน duplicates) ── */
+    const addedKeys = new Set();
+    const allSongs  = [];
+
+    const lsSongs = JSON.parse(localStorage.getItem('uploadedSongs')) || [];
+    lsSongs.forEach(s => {
+      const key = `${s.name}|${s.artist || ''}`;
+      if (!addedKeys.has(key)) {
+        addedKeys.add(key);
+        allSongs.push({ title: s.name, artist: s.artist || '', duration: s.duration || '0:00' });
+      }
+    });
+
+    try {
+      const idbSongs = await getAllSongsFromDB();
+      idbSongs.forEach(s => {
+        const key = `${s.name}|${s.artist || ''}`;
+        if (!addedKeys.has(key)) {
+          addedKeys.add(key);
+          allSongs.push({ title: s.name, artist: s.artist || '', duration: s.duration || '0:00' });
+        }
+      });
+    } catch {}
+
+    if (!allSongs.length) {
+      document.getElementById('currentSongTitle').innerText  = 'ไม่มีเพลง';
+      document.getElementById('currentArtistName').innerText = 'กรุณาเพิ่มเพลงก่อน';
+      return;
+    }
+
+    /* ── เรียงตาม order ที่บันทึกไว้ (เหมือนหน้าสวยดี) ── */
+    playlist = applyOrder(allSongs);
+
+    /* ── หาตำแหน่งเพลงปัจจุบัน ── */
+    if (songName) {
+      const found = playlist.findIndex(p => p.title === songName && p.artist === (artistName || ''));
+      currentIndex = found !== -1 ? found : 0;
+    }
+
+    document.getElementById('currentSongTitle').innerText  = playlist[currentIndex].title;
+    document.getElementById('currentArtistName').innerText = playlist[currentIndex].artist;
+
+    const coverSrc = await getCoverSrcAsync(playlist[currentIndex].title, playlist[currentIndex].artist);
+    setAlbumArt(coverSrc);
+    renderQueue();
+    updateAddlistBtnState();
+    updateHeartBtnState();
+
+    /* ── โหลด audio ── */
+    let audioSrc = null;
+
+    const cachedSrc = sessionStorage.getItem('currentAudioSrc');
+    if (cachedSrc) audioSrc = cachedSrc;
+
+    if (!audioSrc) {
+      const lsSong = lsSongs.find(s =>
+        s.name === playlist[currentIndex].title && s.artist === playlist[currentIndex].artist);
+      if (lsSong && lsSong.audioFile && lsSong.audioFile.startsWith('data:'))
+        audioSrc = lsSong.audioFile;
+    }
+
+    if (!audioSrc) {
+      const idbSong = await getSongFromDB(playlist[currentIndex].title, playlist[currentIndex].artist);
+      if (idbSong && idbSong.audioFile) {
+        const mime = idbSong.audioType || 'audio/mpeg';
+        const blob = new Blob([idbSong.audioFile], { type: mime });
+        audioSrc   = URL.createObjectURL(blob);
+      }
+    }
+
+    if (audioSrc) {
+      audioElement.src     = audioSrc;
+      audioElement.preload = 'auto';
+
+      let playStarted = false;
+      const tryPlay = () => {
+        if (playStarted) return;
+        playStarted = true;
+        if (savedPlayTime > 0) {
+          try { audioElement.currentTime = savedPlayTime; } catch {}
+          localStorage.removeItem('currentPlayTime');
+        }
+        audioElement.play().then(() => {
+          isPlaying = true;
+          setPlayIcon(true);
+        }).catch(() => {
+          isPlaying = false;
+          setPlayIcon(false);
+        });
+      };
+
+      if (audioElement.readyState >= 2) {
+        tryPlay();
+      } else {
+        audioElement.addEventListener('canplay', tryPlay, { once: true });
+        setTimeout(() => {
+          if (!playStarted) {
+            audioElement.removeEventListener('canplay', tryPlay);
+            tryPlay();
+          }
+        }, 3000);
+      }
+    }
+  });
+</script>
+</body>
+</html>

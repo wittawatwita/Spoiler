@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title id="page-title">SoundFlow — เพลงที่ชอบ</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-primary: #121212;
+    --bg-secondary: #181818;
+    --bg-tertiary: #282828;
+    --text-primary: #ffffff;
+    --text-secondary: #b3b3b3;
+    --text-tertiary: #6a6a6a;
+    --accent: #1DB954;
+    --accent-hover: #1ed760;
+    --border: rgba(255,255,255,0.08);
+    --border-hover: rgba(255,255,255,0.15);
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --sidebar-width: 240px;
+    --player-height: 90px;
+    --mobile-player-height: 64px;
+    --mobile-nav-height: 60px;
+    --font: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+
+  html, body { height: 100%; background: var(--bg-primary); color: var(--text-primary); font-family: var(--font); font-size: 14px; overflow: hidden; }
+  .app { display: grid; grid-template-columns: var(--sidebar-width) 1fr; grid-template-rows: 1fr var(--player-height); height: 100vh; }
+  .sidebar { grid-row: 1 / 2; background: #000; border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .sidebar-logo { padding: 24px 20px 16px; display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 32px; height: 32px; background: var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .logo-icon i { font-size: 15px; color: #000; }
+  .logo-text { font-size: 16px; font-weight: 700; }
+  .sidebar-nav { padding: 0 12px 8px; }
+  .nav-item { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: var(--radius-md); cursor: pointer; transition: background 0.15s; text-decoration: none; color: inherit; margin-bottom: 2px; }
+  .nav-item:hover { background: var(--bg-tertiary); }
+  .nav-item.active { background: var(--bg-tertiary); }
+  .nav-item i { font-size: 20px; color: var(--text-secondary); }
+  .nav-item.active i, .nav-item.active span { color: var(--text-primary); }
+  .nav-item span { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+
+  .main { grid-column: 2; overflow-y: auto; background: var(--bg-primary); scrollbar-width: thin; scrollbar-color: var(--bg-tertiary) transparent; }
+  .main::-webkit-scrollbar { width: 6px; }
+  .main::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 3px; }
+
+  .playlist-header { padding: 40px 28px 24px; display: flex; align-items: flex-end; gap: 24px; }
+  .big-cover { width: 160px; height: 160px; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; box-shadow: 0 12px 32px rgba(0,0,0,0.5); flex-shrink: 0; overflow: hidden; }
+  .big-cover i { font-size: 72px; color: #fff; }
+  .big-cover img { width: 100%; height: 100%; object-fit: cover; }
+  .header-info-box { display: flex; flex-direction: column; gap: 4px; }
+  .header-tag { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+  .header-title { font-size: clamp(32px, 5vw, 56px); font-weight: 800; line-height: 1.1; margin: 4px 0; }
+  .header-meta { font-size: 13px; color: rgba(255,255,255,0.8); display: flex; align-items: center; gap: 6px; }
+  .header-meta .user-name { font-weight: 600; color: #fff; }
+
+  .action-bar { padding: 20px 28px; display: flex; align-items: center; gap: 20px; }
+  .big-play-btn { width: 52px; height: 52px; background: var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.2s, background 0.2s; border: none; }
+  .big-play-btn:hover { transform: scale(1.05); background: var(--accent-hover); }
+  .big-play-btn i { font-size: 22px; color: #000; margin-left: 2px; }
+  .action-icon-btn { font-size: 24px; color: var(--text-secondary); cursor: pointer; transition: color 0.2s; background: none; border: none; padding: 0; display: flex; align-items: center; }
+  .action-icon-btn:hover { color: var(--text-primary); }
+  .action-icon-btn.active { color: var(--accent); }
+  .action-icon-btn.delete-btn:hover { color: #e74c4c; }
+
+  /* ─── Section Labels ─── */
+  .section-label {
+    padding: 28px 28px 10px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .section-label-icon {
+    width: 40px; height: 40px; border-radius: var(--radius-md);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; overflow: hidden;
+  }
+  .section-label-icon i { font-size: 20px; color: #fff; }
+  .section-label-icon img { width: 100%; height: 100%; object-fit: cover; }
+  .section-label-info { flex: 1; min-width: 0; }
+  .section-label-info .s-name { font-size: 17px; font-weight: 700; }
+  .section-label-info .s-count { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  .section-divider { height: 1px; background: var(--border); margin: 0 28px 4px; }
+
+  /* ─── Track List ─── */
+  .tracklist-container { padding: 0 28px 8px; }
+  .track-header { display: grid; grid-template-columns: 40px 1fr 160px 80px 40px; gap: 8px; padding: 0 8px 10px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+  .track-header span { font-size: 11px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; }
+  .track-header .th-dur { text-align: right; }
+
+  .track-item { display: grid; grid-template-columns: 40px 1fr 160px 80px 40px; gap: 8px; padding: 8px; align-items: center; border-radius: var(--radius-md); cursor: pointer; transition: background 0.12s; margin-bottom: 2px; }
+  .track-item:hover { background: rgba(255,255,255,0.05); }
+  .track-item.playing { background: rgba(29,185,84,0.08); }
+  .track-item.playing .track-text .name { color: var(--accent); }
+
+  .track-num { font-size: 14px; color: var(--text-tertiary); text-align: center; }
+  .track-info { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .track-img { width: 40px; height: 40px; border-radius: var(--radius-sm); flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--bg-tertiary); overflow: hidden; }
+  .track-img img { width: 100%; height: 100%; object-fit: cover; }
+  .track-img i { font-size: 16px; color: rgba(255,255,255,0.4); }
+  .track-text { min-width: 0; }
+  .track-text .name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track-text .artist { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  .track-album { font-size: 13px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track-dur { font-size: 13px; color: var(--text-secondary); text-align: right; }
+  .track-like { display: flex; justify-content: center; align-items: center; cursor: pointer; }
+  .track-like i { font-size: 16px; color: var(--text-tertiary); transition: transform 0.1s, color 0.15s; }
+  .track-like i.ti-heart-filled { color: var(--accent); }
+  .track-like:active i { transform: scale(0.8); }
+
+  .section-spacer { height: 24px; }
+
+  /* ─── Empty State ─── */
+  .empty-state { padding: 80px 28px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .empty-state i { font-size: 56px; color: var(--text-tertiary); }
+  .empty-state .empty-title { font-size: 20px; font-weight: 700; color: var(--text-secondary); }
+  .empty-state .empty-sub { font-size: 13px; color: var(--text-tertiary); }
+
+  /* ─── Player Bar ─── */
+  .player-bar { grid-column: 1 / 3; background: #0a0a0a; border-top: 1px solid var(--border); display: grid; grid-template-columns: 280px 1fr 220px; align-items: center; padding: 0 24px; }
+  .player-left { display: flex; align-items: center; gap: 12px; }
+  .now-play-img { width: 48px; height: 48px; border-radius: var(--radius-sm); background: #2d6a9f; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .now-play-img i { font-size: 20px; color: #fff; }
+  .now-play-img img { width: 48px; height: 48px; object-fit: cover; display: block; }
+  .now-play-meta { min-width: 0; }
+  .now-play-meta .name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .now-play-meta .artist { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+  .player-heart { cursor: pointer; }
+  .player-heart i { font-size: 18px; color: var(--text-secondary); margin-left: 4px; transition: color 0.15s; }
+  .player-heart i.ti-heart-filled { color: var(--accent); }
+  .player-center { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .player-controls { display: flex; align-items: center; gap: 20px; }
+  .ctrl-btn { cursor: pointer; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; transition: color 0.15s; }
+  .ctrl-btn:hover { color: var(--text-primary); }
+  .ctrl-btn.active { color: var(--accent); }
+  .ctrl-btn.primary { width: 36px; height: 36px; background: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #000; transition: transform 0.1s; }
+  .ctrl-btn.primary:hover { transform: scale(1.06); color: #000; }
+  .progress-row { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 380px; font-size: 11px; color: var(--text-tertiary); }
+  .progress-bar-wrap { flex: 1; height: 4px; background: var(--bg-tertiary); border-radius: 2px; position: relative; cursor: pointer; }
+  .progress-bar-wrap:hover .progress-fill { background: var(--accent); }
+  .progress-bar-wrap:hover .progress-thumb { opacity: 1; }
+  .progress-fill { width: 0%; height: 100%; background: var(--text-secondary); border-radius: 2px; position: relative; transition: background 0.15s; }
+  .progress-thumb {
+    width: 12px; height: 12px; background: var(--text-primary);
+    border-radius: 50%; position: absolute; right: -6px; top: 50%;
+    transform: translateY(-50%); opacity: 0; transition: opacity 0.15s;
+  }
+  .prog-time { min-width: 32px; font-variant-numeric: tabular-nums; }
+  .prog-time.right { text-align: right; }
+  .player-right { display: flex; align-items: center; justify-content: flex-end; }
+  .vol-bar { width: 80px; height: 4px; background: var(--bg-tertiary); border-radius: 2px; cursor: pointer; }
+  .vol-bar:hover .vol-fill { background: var(--accent); }
+  .vol-fill { width: 70%; height: 100%; background: var(--text-secondary); border-radius: 2px; transition: background 0.15s; }
+
+  /* ─── Modal ─── */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal-box { background: var(--bg-tertiary); border-radius: var(--radius-lg); padding: 28px 32px; max-width: 360px; width: 90%; box-shadow: 0 24px 48px rgba(0,0,0,0.6); transform: scale(0.95); transition: transform 0.2s; }
+  .modal-overlay.open .modal-box { transform: scale(1); }
+  .modal-icon { width: 52px; height: 52px; background: rgba(231,76,60,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+  .modal-icon i { font-size: 24px; color: #e74c4c; }
+  .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+  .modal-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px; }
+  .modal-desc strong { color: var(--text-primary); }
+  .modal-actions { display: flex; gap: 12px; justify-content: flex-end; }
+  .btn-cancel { padding: 10px 20px; border-radius: var(--radius-md); border: 1px solid var(--border-hover); background: transparent; color: var(--text-primary); font-size: 14px; cursor: pointer; }
+  .btn-cancel:hover { background: rgba(255,255,255,0.06); }
+  .btn-delete { padding: 10px 20px; border-radius: var(--radius-md); border: none; background: #e74c4c; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn-delete:hover { background: #c0392b; }
+
+  .mobile-player { display: none; }
+  .bottom-nav { display: none; }
+
+  /* ─── Toast ─── */
+  .toast {
+    position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--bg-tertiary); color: var(--text-primary);
+    padding: 10px 18px; border-radius: 20px;
+    font-size: 13px; font-weight: 500;
+    opacity: 0; transition: opacity 0.25s, transform 0.25s;
+    pointer-events: none; z-index: 9998;
+    white-space: nowrap; border: 1px solid var(--border);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ─── Track drag states ─── */
+  .track-item.is-source {
+    opacity: 0.3;
+    pointer-events: none;
+  }
+  .track-item.drop-above::before,
+  .track-item.drop-below::after {
+    content: '';
+    position: absolute; left: 0; right: 0; height: 2px;
+    background: var(--accent);
+    border-radius: 1px;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .track-item { position: relative; }
+  .track-item.drop-above::before { top: -1px; }
+  .track-item.drop-below::after  { bottom: -1px; }
+  .track-item.press-feedback {
+    background: var(--bg-tertiary) !important;
+    outline: 1.5px solid rgba(29,185,84,0.5);
+    outline-offset: -1px;
+  }
+
+  /* ─── Ghost card ─── */
+  #drag-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    left: 0; top: 0;
+    width: 360px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    display: none;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+    transform: rotate(1.5deg) scale(1.03);
+    will-change: transform, left, top;
+  }
+  #drag-ghost.active { display: flex; }
+  #drag-ghost .ghost-img {
+    width: 36px; height: 36px; border-radius: var(--radius-sm);
+    flex-shrink: 0; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    background: #2d6a9f;
+  }
+  #drag-ghost .ghost-img img { width: 36px; height: 36px; object-fit: cover; display: block; }
+  #drag-ghost .ghost-img i { font-size: 15px; color: rgba(255,255,255,0.75); }
+  #drag-ghost .ghost-name { font-size: 13px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+  #drag-ghost .ghost-artist { font-size: 11px; color: var(--text-secondary); }
+  #drag-ghost .ghost-grip { margin-left: auto; flex-shrink: 0; color: var(--accent); }
+  #drag-ghost .ghost-grip i { font-size: 16px; }
+
+  @media (max-width: 768px) {
+    #drag-ghost { width: 280px; }
+  }
+    .app { grid-template-columns: 1fr; grid-template-rows: 1fr var(--mobile-nav-height); height: 100vh; }
+    .sidebar, .player-bar { display: none; }
+    .main { grid-column: 1; grid-row: 1 / 2; padding-bottom: 40px; }
+    .playlist-header { padding: 32px 16px 20px; flex-direction: column; align-items: center; text-align: center; gap: 16px; }
+    .big-cover { width: 130px; height: 130px; }
+    .big-cover i { font-size: 56px; }
+    .header-title { font-size: 28px; }
+    .header-meta { justify-content: center; font-size: 12px; }
+    .action-bar { padding: 12px 16px; }
+    .tracklist-container { padding: 0 16px 8px; }
+    .section-label { padding: 20px 16px 10px; }
+    .section-divider { margin: 0 16px 4px; }
+    .track-header { grid-template-columns: 1fr 40px; }
+    .track-header .th-num, .track-header .th-album, .track-header .th-dur { display: none; }
+    .track-item { grid-template-columns: 1fr 40px; padding: 10px 4px; }
+    .track-num, .track-album, .track-dur { display: none; }
+    .bottom-nav { display: flex; position: fixed; bottom: 0; left: 0; right: 0; height: var(--mobile-nav-height); background: #000; border-top: 1px solid var(--border); z-index: 101; }
+    .bn-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-decoration: none; color: inherit; }
+    .bn-item i { font-size: 22px; color: var(--text-tertiary); }
+    .bn-item span { font-size: 10px; color: var(--text-tertiary); }
+    .bn-item.active i, .bn-item.active span { color: var(--text-primary); }
+    .modal-box { padding: 24px 20px; }
+    .modal-actions { flex-direction: column-reverse; }
+    .btn-cancel, .btn-delete { width: 100%; text-align: center; padding: 12px; }
+
+    .main { padding-bottom: calc(var(--mobile-player-height) + var(--mobile-nav-height) + 16px); }
+
+    .mobile-player {
+      display: flex; align-items: center;
+      position: fixed; bottom: var(--mobile-nav-height); left: 0; right: 0;
+      height: var(--mobile-player-height);
+      background: #1e1e1e; border-top: 1px solid var(--border);
+      padding: 0 14px; gap: 10px; z-index: 100;
+      opacity: 0; visibility: hidden; transition: opacity 0.3s, visibility 0.3s;
+    }
+    .mobile-player.active { opacity: 1; visibility: visible; }
+    .mp-img {
+      width: 42px; height: 42px; border-radius: var(--radius-sm);
+      background: #2d6a9f; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; overflow: hidden;
+    }
+    .mp-img i { font-size: 18px; color: rgba(255,255,255,0.75); }
+    .mp-img img { width: 42px; height: 42px; object-fit: cover; display: block; }
+    .mp-meta { flex: 1; min-width: 0; }
+    .mp-meta .name   { font-size: 13px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mp-meta .artist { font-size: 11px; color: var(--text-secondary); }
+    .mp-controls { display: flex; align-items: center; gap: 14px; }
+    .mp-controls i { font-size: 20px; color: var(--text-secondary); cursor: pointer; }
+    .mp-controls .play-main { font-size: 26px; color: var(--text-primary); }
+    .mp-progress { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--bg-tertiary); }
+    .mp-progress-fill { width: 0%; height: 100%; background: var(--accent); }
+
+    .toast { bottom: 145px; }
+</style>
+</head>
+<body>
+
+<div id="drag-ghost">
+  <div class="ghost-img" id="ghostImg"><i class="ti ti-music"></i></div>
+  <div style="flex:1;min-width:0;">
+    <div class="ghost-name"   id="ghostName">-</div>
+    <div class="ghost-artist" id="ghostArtist">-</div>
+  </div>
+  <div class="ghost-grip"><i class="ti ti-grip-vertical"></i></div>
+</div>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon"><i class="ti ti-player-play"></i></div>
+      <span class="logo-text">SoundFlow</span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="index.html" class="nav-item"><i class="ti ti-home"></i><span>หน้าแรก</span></a>
+      <a href="ค้นหาเพลง.html" class="nav-item"><i class="ti ti-search"></i><span>ค้นหา</span></a>
+      <a href="คลังเพลง.html" class="nav-item"><i class="ti ti-library"></i><span>คลังเพลง</span></a>
+    </nav>
+  </aside>
+
+  <main class="main" id="mainScroll">
+    <header class="playlist-header" id="playlist-header">
+      <div class="big-cover" id="big-cover"></div>
+      <div class="header-info-box">
+        <span class="header-tag">เพลย์ลิสต์</span>
+        <h1 class="header-title" id="header-title">เพลงที่ชอบ</h1>
+        <div class="header-meta">
+          <span class="user-name" id="header-owner">กิตติพงษ์</span>
+          <span>•</span>
+          <span id="header-count">กำลังโหลด...</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="action-bar">
+      <button class="big-play-btn" title="เล่นทั้งหมด" onclick="playAllSongs()">
+        <i class="ti ti-player-play-filled" id="bigPlayIcon"></i>
+      </button>
+      <!-- ปุ่ม Shuffle — เปลี่ยนสีเมื่อเปิด/ปิด เหมือน index.html -->
+      <i class="ti ti-arrows-shuffle action-icon-btn" id="shuffleBtn" title="สุ่มเพลง" onclick="toggleShuffle()"></i>
+      <i class="ti ti-download action-icon-btn" title="ดาวน์โหลด"></i>
+      <button class="action-icon-btn delete-btn" id="delete-btn" title="ลบเพลย์ลิสต์"
+        onclick="openDeleteModal()" style="display:none; margin-left:auto;">
+        <i class="ti ti-trash"></i>
+      </button>
+    </div>
+
+    <!-- เพลงแบ่งตาม Playlist จะ render ตรงนี้ -->
+    <div id="sections-container"></div>
+  </main>
+
+  <footer class="player-bar">
+    <div class="player-left">
+      <div class="now-play-img" id="nowPlayImg"><i class="ti ti-music"></i></div>
+      <div class="now-play-meta">
+        <div class="name">-</div>
+        <div class="artist">ไม่มีเพลงที่กำลังเล่น</div>
+      </div>
+      <div class="player-heart" id="playerHeart" onclick="togglePlayerHeart()"><i class="ti ti-heart"></i></div>
+    </div>
+    <div class="player-center">
+      <div class="player-controls">
+        <!-- Shuffle ใน player bar desktop -->
+        <i class="ti ti-arrows-shuffle ctrl-btn" id="desktopShuffleBtn" style="font-size:18px;" onclick="toggleShuffle()"></i>
+        <div class="ctrl-btn" id="prevBtn"><i class="ti ti-player-skip-back" style="font-size:20px;"></i></div>
+        <div class="ctrl-btn primary" id="desktopPlayBtn"><i class="ti ti-player-play" style="font-size:16px;margin-left:2px;"></i></div>
+        <div class="ctrl-btn" id="nextBtn"><i class="ti ti-player-skip-forward" style="font-size:20px;"></i></div>
+        <i class="ti ti-repeat ctrl-btn" style="font-size:18px;"></i>
+      </div>
+      <div class="progress-row">
+        <span class="prog-time">0:00</span>
+        <div class="progress-bar-wrap">
+          <div class="progress-fill"><div class="progress-thumb"></div></div>
+        </div>
+        <span class="prog-time right">0:00</span>
+      </div>
+    </div>
+    <div class="player-right">
+      <i class="ti ti-volume ctrl-btn" style="font-size:20px;margin-right:8px;"></i>
+      <div class="vol-bar"><div class="vol-fill"></div></div>
+    </div>
+  </footer>
+</div>
+
+<!-- Mobile Mini Player — ลิงก์ไปหน้า song.html เหมือน index.html -->
+<div class="mobile-player" id="miniPlayer">
+  <div class="mp-progress"><div class="mp-progress-fill" id="mpProgressFill"></div></div>
+  <a href="song.html" id="openFullPlayer"
+     style="display:flex;flex:1;align-items:center;gap:10px;text-decoration:none;color:inherit;min-width:0;">
+    <div class="mp-img" id="mpImg"><i class="ti ti-wave-sine"></i></div>
+    <div class="mp-meta">
+      <div class="name"   id="mpName">-</div>
+      <div class="artist" id="mpArtist">ไม่มีเพลงที่กำลังเล่น</div>
+    </div>
+  </a>
+  <div class="mp-controls">
+    <i class="ti ti-player-play play-main" id="mpPlayBtn"></i>
+  </div>
+</div>
+
+<nav class="bottom-nav">
+  <a href="index.html" class="bn-item"><i class="ti ti-home"></i><span>หน้าแรก</span></a>
+  <a href="ค้นหาเพลง.html" class="bn-item"><i class="ti ti-search"></i><span>ค้นหา</span></a>
+  <a href="คลังเพลง.html" class="bn-item active"><i class="ti ti-library"></i><span>คลัง</span></a>
+</nav>
+
+<!-- Delete Playlist Modal -->
+<div class="modal-overlay" id="delete-modal">
+  <div class="modal-box">
+    <div class="modal-icon"><i class="ti ti-trash"></i></div>
+    <div class="modal-title">ลบเพลย์ลิสต์?</div>
+    <div class="modal-desc">
+      คุณต้องการลบ <strong id="modal-pl-name"></strong> ใช่ไหม?<br>
+      การกระทำนี้ไม่สามารถย้อนกลับได้
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeDeleteModal()">ยกเลิก</button>
+      <button class="btn-delete" onclick="confirmDelete()">ลบเพลย์ลิสต์</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ══════════════════════════════════════════
+   Keys & State
+══════════════════════════════════════════ */
+const PLAYLISTS_KEY = 'sf_playlists';
+const ORDER_KEY     = 'soundflow_song_order';
+const LIKED_KEY     = 'sf_liked_songs';
+
+let allSongs          = [];
+let playlists         = [];
+let currentPlaylistId = null;
+let isLikedPage        = false;   /* true เมื่ออยู่หน้า "เพลงที่ชอบ" (id=liked หรือไม่มี id) */
+let initDone          = false;
+
+/* คิวเพลงของเพลย์ลิสต์ที่กำลังแสดงอยู่ในหน้านี้ */
+let currentSongList      = [];  /* ลำดับจริงๆ (ไม่ shuffle) */
+let shuffledSongList     = [];  /* ลำดับ shuffle (ใช้เมื่อ shuffleOn = true) */
+let currentPlayIndex     = -1;
+let shuffleOn            = false;  /* สถานะ shuffle */
+
+/* ══════════════════════════════════════════
+   Static Playlist Defs
+══════════════════════════════════════════ */
+const STATIC_PLAYLISTS = {
+  liked: {
+    name: 'เพลงที่ชอบ',
+    gradient: 'linear-gradient(to bottom, #450af5 0%, #20067a 70%, var(--bg-primary) 100%)',
+    coverGradient: 'linear-gradient(135deg, #450af5 0%, #8e8ee5 100%)',
+    icon: 'ti-heart-filled',
+    owner: 'กิตติพงษ์',
+    deletable: false,
+  },
+};
+
+/* ══════════════════════════════════════════
+   Toast
+══════════════════════════════════════════ */
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+/* ══════════════════════════════════════════
+   Helpers
+══════════════════════════════════════════ */
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function getParam(key) {
+  return new URLSearchParams(window.location.search).get(key);
+}
+function loadPlaylists() {
+  try { return JSON.parse(localStorage.getItem(PLAYLISTS_KEY)) || []; }
+  catch { return []; }
+}
+function getCoverSrc(name, artist) {
+  return localStorage.getItem(`cover_${name}_${artist}`) || null;
+}
+
+/* ══════════════════════════════════════════
+   Liked Songs — เก็บเพลงที่กดหัวใจ (ใช้ key เดียวกันทั้งแอป)
+══════════════════════════════════════════ */
+function loadLikedSongs() {
+  try { return JSON.parse(localStorage.getItem(LIKED_KEY)) || []; }
+  catch { return []; }
+}
+function saveLikedSongs(list) {
+  localStorage.setItem(LIKED_KEY, JSON.stringify(list));
+}
+function isSongLiked(name, artist) {
+  return loadLikedSongs().some(s => s.name === name && (s.artist || '') === (artist || ''));
+}
+/** toggle และคืนค่าสถานะใหม่ (true = ถูกใจแล้ว) */
+function toggleLikedSong(name, artist) {
+  const list = loadLikedSongs();
+  const idx  = list.findIndex(s => s.name === name && (s.artist || '') === (artist || ''));
+  let liked;
+  if (idx !== -1) {
+    list.splice(idx, 1);
+    liked = false;
+  } else {
+    list.push({ name, artist: artist || '' });
+    liked = true;
+  }
+  saveLikedSongs(list);
+  return liked;
+}
+
+/* ══════════════════════════════════════════
+   Shuffle helpers
+══════════════════════════════════════════ */
+/* Fisher-Yates */
+function shuffleArray(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/* รายการที่ใช้งานจริง ณ ขณะนี้ */
+function getActiveList() {
+  return shuffleOn ? shuffledSongList : currentSongList;
+}
+
+/* เปิด/ปิด shuffle */
+function toggleShuffle() {
+  shuffleOn = !shuffleOn;
+
+  if (shuffleOn) {
+    /* สร้าง shuffled list — ถ้ากำลังเล่นอยู่ให้เพลงนั้นอยู่หัวแถว */
+    shuffledSongList = shuffleArray(currentSongList);
+    if (currentPlayIndex >= 0) {
+      const playingList = getActiveList();
+      const curSong     = playingList[currentPlayIndex] ||
+                          (shuffleOn ? currentSongList[currentPlayIndex] : null);
+      if (curSong) {
+        const newIdx = shuffledSongList.findIndex(
+          s => s.title === curSong.title && s.artist === curSong.artist
+        );
+        if (newIdx > 0) {
+          shuffledSongList.splice(newIdx, 1);
+          shuffledSongList.unshift(curSong);
+        }
+        currentPlayIndex = 0;
+      }
+    }
+    showToast('เปิดสุ่มเพลงแล้ว');
+  } else {
+    /* ปิด shuffle — หา index ของเพลงที่กำลังเล่นในลิสต์ปกติ */
+    if (currentPlayIndex >= 0 && shuffledSongList.length) {
+      const cur = shuffledSongList[currentPlayIndex];
+      if (cur) {
+        currentPlayIndex = currentSongList.findIndex(
+          s => s.title === cur.title && s.artist === cur.artist
+        );
+      }
+    }
+    showToast('ปิดสุ่มเพลงแล้ว');
+  }
+
+  updateShuffleUI();
+  saveOrderForQueue(getActiveList());
+}
+
+function updateShuffleUI() {
+  /* ปุ่มใน action bar */
+  const ab = document.getElementById('shuffleBtn');
+  if (ab) ab.classList.toggle('active', shuffleOn);
+
+  /* ปุ่มใน player bar desktop */
+  const db = document.getElementById('desktopShuffleBtn');
+  if (db) db.classList.toggle('active', shuffleOn);
+}
+
+/* ══════════════════════════════════════════
+   IndexedDB
+══════════════════════════════════════════ */
+let db = null;
+
+function openDB() {
+  return new Promise((resolve) => {
+    const req = indexedDB.open('SoundFlowDB', 1);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('songs'))
+        d.createObjectStore('songs', { keyPath: 'id', autoIncrement: true });
+    };
+    req.onsuccess = (e) => { db = e.target.result; resolve(db); };
+    req.onerror   = () => resolve(null);
+  });
+}
+
+function getAllSongsFromDB() {
+  return new Promise((resolve) => {
+    if (!db) return resolve([]);
+    const req = db.transaction(['songs'], 'readonly').objectStore('songs').getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror   = () => resolve([]);
+  });
+}
+
+function arrayBufferToBase64DataUrl(buf, mime) {
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  for (let i = 0; i < bytes.byteLength; i += 8192)
+    bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  return 'data:' + mime + ';base64,' + btoa(bin);
+}
+
+function saveCurrentAudioSrc(url, mime) {
+  try {
+    sessionStorage.setItem('currentAudioSrc',  url);
+    sessionStorage.setItem('currentAudioType', mime || 'audio/mpeg');
+  } catch (e) { sessionStorage.removeItem('currentAudioSrc'); }
+}
+
+/* ══════════════════════════════════════════
+   Load All Songs
+══════════════════════════════════════════ */
+async function loadAllSongs() {
+  const seen  = new Set();
+  const songs = [];
+
+  const lsSongs = JSON.parse(localStorage.getItem('uploadedSongs') || '[]');
+  lsSongs.forEach(s => {
+    const k = `${s.name}|${s.artist || ''}`;
+    if (!seen.has(k)) {
+      seen.add(k);
+      songs.push({ title: s.name, artist: s.artist || '', duration: s.duration || '' });
+    }
+  });
+
+  const idbSongs = await getAllSongsFromDB();
+  idbSongs.forEach(s => {
+    const k = `${s.name}|${s.artist || ''}`;
+    if (!seen.has(k)) {
+      seen.add(k);
+      songs.push({ title: s.name, artist: s.artist || '', duration: s.duration || '' });
+    }
+  });
+
+  return songs;
+}
+
+/* ══════════════════════════════════════════
+   Header
+══════════════════════════════════════════ */
+function applyHeader(info, isUserPlaylist) {
+  document.getElementById('playlist-header').style.background =
+    info.gradient || 'linear-gradient(to bottom, #450af5 0%, #20067a 70%, var(--bg-primary) 100%)';
+
+  const coverEl = document.getElementById('big-cover');
+  if (info.coverImg) {
+    coverEl.style.background = '#000';
+    coverEl.innerHTML = `<img src="${escHtml(info.coverImg)}" alt="cover">`;
+  } else {
+    coverEl.style.background = info.coverGradient || 'linear-gradient(135deg,#450af5,#8e8ee5)';
+    coverEl.innerHTML = `<i class="ti ${info.icon || 'ti-heart-filled'}"></i>`;
+  }
+
+  document.getElementById('header-title').textContent   = info.name;
+  document.getElementById('header-owner').textContent   = info.owner || 'คุณ';
+  document.getElementById('page-title').textContent     = 'SoundFlow — ' + info.name;
+  document.getElementById('modal-pl-name').textContent  = info.name;
+
+  const btn = document.getElementById('delete-btn');
+  btn.style.display = isUserPlaylist ? 'flex' : 'none';
+}
+
+function initHeader() {
+  const id = getParam('id');
+  if (!id || id === 'liked') {
+    currentPlaylistId = null;
+    isLikedPage = true;
+    applyHeader(STATIC_PLAYLISTS.liked, false);
+    return;
+  }
+  const pls = loadPlaylists();
+  const pl  = pls.find(p => String(p.id) === String(id));
+  if (pl) {
+    currentPlaylistId = pl.id;
+    isLikedPage = false;
+    applyHeader({
+      name: pl.name,
+      gradient: 'linear-gradient(to bottom, #1a5a3a 0%, #0a2a1a 70%, var(--bg-primary) 100%)',
+      coverGradient: 'linear-gradient(135deg, #1a5a3a 0%, #1DB954 100%)',
+      coverImg: pl.cover || null,
+      icon: 'ti-music',
+      owner: 'คุณ',
+    }, true);
+    return;
+  }
+  currentPlaylistId = null;
+  isLikedPage = true;
+  applyHeader(STATIC_PLAYLISTS.liked, false);
+}
+
+/* ══════════════════════════════════════════
+   Render Sections
+══════════════════════════════════════════ */
+function renderSections() {
+  const container = document.getElementById('sections-container');
+  container.innerHTML = '';
+
+  playlists = loadPlaylists();
+
+  const songMap = new Map();
+  allSongs.forEach(s => songMap.set(`${s.title}|${s.artist}`, s));
+
+  /* ── หน้า "เพลงที่ชอบ" — ดึงจาก sf_liked_songs ── */
+  if (isLikedPage) {
+    const liked = loadLikedSongs();
+    const songs = liked
+      .map(s => songMap.get(`${s.name}|${s.artist || ''}`))
+      .filter(Boolean);
+
+    document.getElementById('header-count').textContent =
+      songs.length > 0 ? songs.length + ' เพลง' : 'ยังไม่มีเพลง';
+
+    if (!songs.length) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <i class="ti ti-heart"></i>
+          <div class="empty-title">ยังไม่มีเพลงที่ชอบ</div>
+          <div class="empty-sub">กดปุ่มหัวใจที่หน้าเพลงเพื่อเพิ่มเพลงเข้า "เพลงที่ชอบ"</div>
+        </div>`;
+      currentSongList = [];
+      return;
+    }
+
+    renderSection(container, {
+      name: 'เพลงที่ชอบ',
+      icon: 'ti-heart-filled',
+      coverImg: null,
+      songs,
+    });
+    return;
+  }
+
+  /* ── เพลย์ลิสต์ของผู้ใช้ ── */
+  const currentPl = currentPlaylistId !== null
+    ? playlists.find(p => String(p.id) === String(currentPlaylistId))
+    : null;
+
+  if (!currentPl) {
+    document.getElementById('header-count').textContent = 'ยังไม่มีเพลง';
+    container.innerHTML = `
+      <div class="empty-state">
+        <i class="ti ti-playlist"></i>
+        <div class="empty-title">ยังไม่มีเพลงในเพลย์ลิสต์</div>
+        <div class="empty-sub">กดปุ่ม + ในหน้าเพลงเพื่อเพิ่มเพลงเข้าเพลย์ลิสต์</div>
+      </div>`;
+    currentSongList = [];
+    return;
+  }
+
+  const songs = (currentPl.songs || [])
+    .map(s => songMap.get(`${s.name}|${s.artist || ''}`))
+    .filter(Boolean);
+
+  document.getElementById('header-count').textContent =
+    songs.length > 0 ? songs.length + ' เพลง' : 'ยังไม่มีเพลง';
+
+  if (!songs.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <i class="ti ti-playlist"></i>
+        <div class="empty-title">ยังไม่มีเพลงในเพลย์ลิสต์นี้</div>
+        <div class="empty-sub">กดปุ่ม + ในหน้าเพลงเพื่อเพิ่มเพลงเข้าเพลย์ลิสต์</div>
+      </div>`;
+    currentSongList = [];
+    return;
+  }
+
+  renderSection(container, {
+    name: currentPl.name,
+    icon: 'ti-music',
+    iconBg: 'linear-gradient(135deg,#1a5a3a,#1DB954)',
+    coverImg: currentPl.cover || null,
+    songs,
+  });
+}
+
+/* ─── Render one section block ─── */
+function renderSection(container, info) {
+  const currentName   = localStorage.getItem('currentSongName')   || '';
+  const currentArtist = localStorage.getItem('currentArtistName') || '';
+
+  /* บันทึกคิวหลัก (ไม่ shuffle) */
+  currentSongList = info.songs;
+
+  /* สร้าง shuffled list เผื่อไว้ */
+  shuffledSongList = shuffleArray(currentSongList);
+
+  const tl = document.createElement('div');
+  tl.className = 'tracklist-container';
+
+  tl.innerHTML = `
+    <div class="track-header">
+      <span class="th-num">#</span>
+      <span>ชื่อเพลง</span>
+      <span class="th-album">เพลย์ลิสต์</span>
+      <span class="th-dur">เวลา</span>
+      <span></span>
+    </div>`;
+
+  info.songs.forEach((song, idx) => {
+    const playing  = song.title === currentName && song.artist === currentArtist;
+    const coverSrc = getCoverSrc(song.title, song.artist);
+    const liked    = isSongLiked(song.title, song.artist);
+
+    const row = document.createElement('div');
+    row.className   = 'track-item' + (playing ? ' playing' : '');
+    row.dataset.idx = idx;
+    row.innerHTML = `
+      <div class="track-num">
+        ${playing
+          ? '<i class="ti ti-volume" style="color:var(--accent);font-size:14px;"></i>'
+          : (idx + 1)}
+      </div>
+      <div class="track-info">
+        <div class="track-img">
+          ${coverSrc ? `<img src="${escHtml(coverSrc)}" alt="">` : `<i class="ti ti-music"></i>`}
+        </div>
+        <div class="track-text">
+          <div class="name">${escHtml(song.title)}</div>
+          <div class="artist">${escHtml(song.artist || '—')}</div>
+        </div>
+      </div>
+      <div class="track-album">${escHtml(info.name)}</div>
+      <div class="track-dur">${escHtml(song.duration || '—')}</div>
+      <div class="track-like" onclick="toggleLike(this,event)" title="ชอบเพลงนี้">
+        <i class="ti ${liked ? 'ti-heart-filled' : 'ti-heart'}"></i>
+      </div>`;
+
+    tl.appendChild(row);
+  });
+
+  container.appendChild(tl);
+
+  const spacer = document.createElement('div');
+  spacer.className = 'section-spacer';
+  container.appendChild(spacer);
+
+  /* sync index ปัจจุบัน */
+  if (currentName) {
+    const idx = currentSongList.findIndex(s => s.title === currentName && s.artist === currentArtist);
+    if (idx >= 0) {
+      if (shuffleOn) {
+        currentPlayIndex = shuffledSongList.findIndex(s => s.title === currentName && s.artist === currentArtist);
+      } else {
+        currentPlayIndex = idx;
+      }
+    }
+  }
+  updateTrackPlayIcon();
+  updateShuffleUI();
+  updatePlayerHeartIcon();
+  attachDragEvents();
+}
+
+/* เล่นจาก index ของ currentSongList (ลำดับเดิม) */
+function playFromOriginalIndex(origIdx) {
+  if (shuffleOn) {
+    /* หา index ของเพลงนี้ใน shuffledSongList */
+    const song = currentSongList[origIdx];
+    if (!song) return;
+    const si = shuffledSongList.findIndex(s => s.title === song.title && s.artist === song.artist);
+    playByIndex(si >= 0 ? si : origIdx);
+  } else {
+    playByIndex(origIdx);
+  }
+}
+
+/* ══════════════════════════════════════════
+   Drag-and-Drop Engine
+══════════════════════════════════════════ */
+const ghost       = document.getElementById('drag-ghost');
+const ghostImg    = document.getElementById('ghostImg');
+const ghostName   = document.getElementById('ghostName');
+const ghostArtist = document.getElementById('ghostArtist');
+
+const dragState = {
+  active: false, srcIdx: null, srcEl: null,
+  overEl: null,  overPos: null, offsetX: 0, offsetY: 0,
+};
+const HOLD_DELAY = 400;
+let holdTimer = null;
+
+function startGhost(el, clientX, clientY) {
+  const song = currentSongList[parseInt(el.dataset.idx)];
+  if (!song) return;
+  const cover = getCoverSrc(song.title, song.artist);
+  ghostImg.innerHTML = cover ? `<img src="${cover}" alt="">` : `<i class="ti ti-music"></i>`;
+  ghostName.textContent   = song.title;
+  ghostArtist.textContent = song.artist || '—';
+  const rect = el.getBoundingClientRect();
+  dragState.offsetX = clientX - rect.left;
+  dragState.offsetY = clientY - rect.top;
+  moveGhost(clientX, clientY);
+  ghost.classList.add('active');
+  dragState.active = true;
+  dragState.srcIdx = parseInt(el.dataset.idx);
+  dragState.srcEl  = el;
+  dragState.overEl = null;
+  el.classList.add('is-source');
+  document.body.style.cursor = 'grabbing';
+  document.getElementById('mainScroll').style.overflow = 'hidden';
+}
+
+function moveGhost(cx, cy) {
+  ghost.style.left = (cx - dragState.offsetX) + 'px';
+  ghost.style.top  = (cy - dragState.offsetY) + 'px';
+}
+
+function clearDropIndicators() {
+  document.querySelectorAll('.track-item.drop-above, .track-item.drop-below').forEach(el => {
+    el.classList.remove('drop-above', 'drop-below');
+  });
+}
+
+function hitTest(cx, cy) {
+  ghost.style.display = 'none';
+  const els = document.elementsFromPoint(cx, cy);
+  ghost.style.display = '';
+  for (const el of els) {
+    if (el.classList.contains('track-item') && el !== dragState.srcEl) return el;
+  }
+  return null;
+}
+
+function onDragMove(cx, cy) {
+  if (!dragState.active) return;
+  moveGhost(cx, cy);
+  clearDropIndicators();
+  const target = hitTest(cx, cy);
+  if (!target) { dragState.overEl = null; dragState.overPos = null; return; }
+  const rect = target.getBoundingClientRect();
+  const pos  = cy < rect.top + rect.height / 2 ? 'above' : 'below';
+  target.classList.add(pos === 'above' ? 'drop-above' : 'drop-below');
+  dragState.overEl  = target;
+  dragState.overPos = pos;
+}
+
+function endDrag() {
+  if (!dragState.active) return;
+  dragState.active = false;
+  ghost.classList.remove('active');
+  document.body.style.cursor = '';
+  document.getElementById('mainScroll').style.overflow = '';
+  if (dragState.srcEl) dragState.srcEl.classList.remove('is-source');
+  clearDropIndicators();
+
+  if (dragState.overEl && dragState.overPos) {
+    const srcIdx    = dragState.srcIdx;
+    const targetIdx = parseInt(dragState.overEl.dataset.idx);
+    const before    = dragState.overPos === 'above';
+
+    if (srcIdx !== targetIdx) {
+      /* ย้ายใน currentSongList */
+      const song = currentSongList.splice(srcIdx, 1)[0];
+      let ins = targetIdx > srcIdx ? targetIdx - 1 : targetIdx;
+      if (!before) ins += 1;
+      currentSongList.splice(ins, 0, song);
+
+      /* ปรับ currentPlayIndex ให้ตามเพลงที่เล่นอยู่ */
+      if (!shuffleOn && currentPlayIndex >= 0) {
+        const curName   = localStorage.getItem('currentSongName')   || '';
+        const curArtist = localStorage.getItem('currentArtistName') || '';
+        currentPlayIndex = currentSongList.findIndex(
+          s => s.title === curName && s.artist === curArtist
+        );
+      }
+
+      /* บันทึกลำดับและ re-render */
+      saveOrderForPlaylist();
+      saveOrderForQueue(getActiveList());
+
+      /* re-render rows ใหม่ โดยไม่ destroy section ทั้งหมด */
+      rebuildRows(ins);
+      showToast(`ย้าย "${song.title}" เรียบร้อย`);
+    }
+  }
+
+  dragState.srcEl = dragState.overEl = null;
+  dragState.srcIdx = dragState.overPos = null;
+}
+
+/* บันทึกลำดับใหม่ลงใน sf_playlists (ใช้ได้กับเพลย์ลิสต์ของผู้ใช้เท่านั้น ไม่ใช่หน้าเพลงที่ชอบ) */
+function saveOrderForPlaylist() {
+  if (isLikedPage || currentPlaylistId === null) return;
+  const pls = loadPlaylists();
+  const pl  = pls.find(p => String(p.id) === String(currentPlaylistId));
+  if (!pl) return;
+  pl.songs = currentSongList.map(s => ({ name: s.title, artist: s.artist || '' }));
+  localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(pls));
+}
+
+/* Re-render เฉพาะ track rows (ไม่ destroy container ทั้งหมด) */
+function rebuildRows(highlightIdx) {
+  const tl = document.querySelector('.tracklist-container');
+  if (!tl) return;
+
+  /* ลบ row เก่าทิ้ง */
+  tl.querySelectorAll('.track-item').forEach(el => el.remove());
+
+  const curName   = localStorage.getItem('currentSongName')   || '';
+  const curArtist = localStorage.getItem('currentArtistName') || '';
+
+  currentSongList.forEach((song, idx) => {
+    const playing  = song.title === curName && song.artist === curArtist;
+    const coverSrc = getCoverSrc(song.title, song.artist);
+    const liked    = isSongLiked(song.title, song.artist);
+    const plName   = isLikedPage
+      ? 'เพลงที่ชอบ'
+      : (loadPlaylists().find(p => String(p.id) === String(currentPlaylistId)) || {}).name || '';
+
+    const row = document.createElement('div');
+    row.className   = 'track-item' + (playing ? ' playing' : '');
+    row.dataset.idx = idx;
+    row.innerHTML = `
+      <div class="track-num">
+        ${playing
+          ? '<i class="ti ti-volume" style="color:var(--accent);font-size:14px;"></i>'
+          : (idx + 1)}
+      </div>
+      <div class="track-info">
+        <div class="track-img">
+          ${coverSrc ? `<img src="${escHtml(coverSrc)}" alt="">` : `<i class="ti ti-music"></i>`}
+        </div>
+        <div class="track-text">
+          <div class="name">${escHtml(song.title)}</div>
+          <div class="artist">${escHtml(song.artist || '—')}</div>
+        </div>
+      </div>
+      <div class="track-album">${escHtml(plName)}</div>
+      <div class="track-dur">${escHtml(song.duration || '—')}</div>
+      <div class="track-like" onclick="toggleLike(this,event)" title="ชอบเพลงนี้">
+        <i class="ti ${liked ? 'ti-heart-filled' : 'ti-heart'}"></i>
+      </div>`;
+
+    tl.appendChild(row);
+  });
+
+  attachDragEvents();
+  updateTrackPlayIcon();
+}
+
+/* Attach hold-to-drag events ทุก row */
+function attachDragEvents() {
+  document.querySelectorAll('.track-item').forEach(row => {
+    /* ป้องกัน duplicate listener */
+    const newRow = row.cloneNode(true);
+    row.parentNode.replaceChild(newRow, row);
+  });
+
+  document.querySelectorAll('.track-item').forEach(row => {
+    /* click */
+    row.addEventListener('click', e => {
+      if (e.target.closest('.track-like')) { toggleLike(e.target.closest('.track-like'), e); return; }
+      if (dragState.active) return;
+      playFromOriginalIndex(parseInt(row.dataset.idx));
+    });
+
+    /* mouse hold */
+    row.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      clearTimeout(holdTimer);
+      row.classList.add('press-feedback');
+      holdTimer = setTimeout(() => {
+        row.classList.remove('press-feedback');
+        startGhost(row, e.clientX, e.clientY);
+      }, HOLD_DELAY);
+    });
+    row.addEventListener('mouseup',    () => { clearTimeout(holdTimer); row.classList.remove('press-feedback'); });
+    row.addEventListener('mouseleave', () => { clearTimeout(holdTimer); row.classList.remove('press-feedback'); });
+
+    /* touch hold */
+    row.addEventListener('touchstart', e => {
+      const t = e.touches[0];
+      clearTimeout(holdTimer);
+      row.classList.add('press-feedback');
+      holdTimer = setTimeout(() => {
+        row.classList.remove('press-feedback');
+        startGhost(row, t.clientX, t.clientY);
+      }, HOLD_DELAY);
+    }, { passive: true });
+    row.addEventListener('touchend',    () => { clearTimeout(holdTimer); row.classList.remove('press-feedback'); if (!dragState.active) return; endDrag(); });
+    row.addEventListener('touchcancel', () => { clearTimeout(holdTimer); row.classList.remove('press-feedback'); endDrag(); });
+  });
+}
+
+/* Global mouse/touch move & up */
+document.addEventListener('mousemove', e => { if (dragState.active) onDragMove(e.clientX, e.clientY); });
+document.addEventListener('mouseup',   () => { clearTimeout(holdTimer); if (dragState.active) endDrag(); });
+document.addEventListener('touchmove', e => {
+  if (!dragState.active) return;
+  e.preventDefault();
+  onDragMove(e.touches[0].clientX, e.touches[0].clientY);
+}, { passive: false });
+document.addEventListener('touchend', e => {
+  clearTimeout(holdTimer);
+  if (dragState.active) {
+    onDragMove(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+    endDrag();
+  }
+});
+document.addEventListener('contextmenu', e => { if (dragState.active) e.preventDefault(); });
+
+/* ══════════════════════════════════════════
+   Audio Engine
+══════════════════════════════════════════ */
+const audioElement = document.createElement('audio');
+audioElement.id = 'audioPlayer';
+document.body.appendChild(audioElement);
+let playing = false;
+
+function setPlayState(p) {
+  playing = p;
+  const di = document.querySelector('#desktopPlayBtn i');
+  if (di) di.className = playing ? 'ti ti-player-pause' : 'ti ti-player-play';
+  const mi = document.getElementById('mpPlayBtn');
+  if (mi) mi.className = playing ? 'ti ti-player-pause play-main' : 'ti ti-player-play play-main';
+  const bi = document.getElementById('bigPlayIcon');
+  if (bi) bi.className = playing ? 'ti ti-player-pause-filled' : 'ti ti-player-play-filled';
+  if (playing) audioElement.play().catch(() => {});
+  else audioElement.pause();
+  updateTrackPlayIcon();
+}
+
+document.getElementById('desktopPlayBtn').addEventListener('click', () => {
+  if (currentPlayIndex < 0 && getActiveList().length) { playByIndex(0); return; }
+  setPlayState(!playing);
+});
+document.getElementById('mpPlayBtn').addEventListener('click', e => {
+  e.preventDefault(); e.stopPropagation();
+  if (currentPlayIndex < 0 && getActiveList().length) { playByIndex(0); return; }
+  setPlayState(!playing);
+});
+document.getElementById('prevBtn').addEventListener('click', () => playByOffset(-1));
+document.getElementById('nextBtn').addEventListener('click', () => playByOffset(1));
+
+/* บันทึกเวลาก่อนไปหน้า song.html */
+document.getElementById('openFullPlayer').addEventListener('click', () => {
+  if (audioElement.currentTime > 0)
+    localStorage.setItem('currentPlayTime', audioElement.currentTime);
+});
+
+function playByOffset(offset) {
+  const list = getActiveList();
+  if (!list.length) return;
+  let next;
+  if (currentPlayIndex < 0) {
+    next = offset >= 0 ? 0 : list.length - 1;
+  } else {
+    next = (currentPlayIndex + offset + list.length) % list.length;
+  }
+  playByIndex(next);
+}
+
+function updatePlayerCover(src) {
+  const ni = document.getElementById('nowPlayImg');
+  if (ni) ni.innerHTML = src ? `<img src="${src}" alt="cover">` : `<i class="ti ti-music"></i>`;
+  const mi = document.getElementById('mpImg');
+  if (mi) mi.innerHTML = src ? `<img src="${src}" alt="cover">` : `<i class="ti ti-wave-sine"></i>`;
+}
+
+/* อัปเดตหัวใจในแถบเล่นเพลง (player bar) ให้ตรงกับเพลงที่กำลังเล่นอยู่ */
+function updatePlayerHeartIcon() {
+  const wrap = document.getElementById('playerHeart');
+  if (!wrap) return;
+  const icon = wrap.querySelector('i');
+  const list = getActiveList();
+  const cur  = currentPlayIndex >= 0 ? list[currentPlayIndex] : null;
+  if (!cur) { icon.className = 'ti ti-heart'; return; }
+  icon.className = isSongLiked(cur.title, cur.artist) ? 'ti ti-heart-filled' : 'ti ti-heart';
+}
+
+/* กดหัวใจในแถบเล่นเพลง — ชอบ/เลิกชอบเพลงที่กำลังเล่นอยู่ */
+function togglePlayerHeart() {
+  const list = getActiveList();
+  const cur  = currentPlayIndex >= 0 ? list[currentPlayIndex] : null;
+  if (!cur) return;
+  const liked = toggleLikedSong(cur.title, cur.artist);
+  updatePlayerHeartIcon();
+  showToast(liked ? `เพิ่ม "${cur.title}" ลงเพลงที่ชอบแล้ว` : `นำ "${cur.title}" ออกจากเพลงที่ชอบแล้ว`);
+  /* ถ้าอยู่หน้าเพลงที่ชอบแล้วเลิกชอบ → อัปเดตรายการทันที */
+  if (isLikedPage) renderSections();
+  else updateTrackPlayIcon();
+}
+
+/* อัปเดตไอคอนแถวเพลง ใช้ index ของ currentSongList เป็นฐาน */
+function updateTrackPlayIcon() {
+  const activeList = getActiveList();
+  /* หา original index ของเพลงที่เล่นอยู่ */
+  let origPlayingIdx = -1;
+  if (currentPlayIndex >= 0 && activeList.length) {
+    const cur = activeList[currentPlayIndex];
+    if (cur) {
+      origPlayingIdx = currentSongList.findIndex(
+        s => s.title === cur.title && s.artist === cur.artist
+      );
+    }
+  }
+
+  document.querySelectorAll('.track-item').forEach((item) => {
+    const idx = parseInt(item.dataset.idx); /* idx ใน currentSongList */
+    const numEl = item.querySelector('.track-num');
+    const isCurrent = idx === origPlayingIdx;
+    item.classList.toggle('playing', isCurrent);
+    if (!numEl) return;
+    if (isCurrent) {
+      numEl.innerHTML = playing
+        ? '<i class="ti ti-volume" style="color:var(--accent);font-size:14px;"></i>'
+        : '<i class="ti ti-player-play" style="color:var(--accent);font-size:13px;"></i>';
+    } else {
+      numEl.innerHTML = String(idx + 1);
+    }
+  });
+}
+
+/* เล่นเพลงตาม index ใน activeList */
+async function playByIndex(idx) {
+  const list = getActiveList();
+  if (idx < 0 || idx >= list.length) return;
+  const song = list[idx];
+  if (!song) return;
+
+  currentPlayIndex = idx;
+
+  const sn = song.title;
+  const an = song.artist || '';
+
+  localStorage.setItem('currentSongName', sn);
+  localStorage.setItem('currentArtistName', an);
+  localStorage.removeItem('currentPlayTime');
+  sessionStorage.removeItem('currentAudioSrc');
+
+  /* บันทึกคิวปัจจุบันให้หน้า song.html ใช้ */
+  saveOrderForQueue(list);
+
+  document.querySelector('.player-bar .now-play-meta .name').innerText   = sn;
+  document.querySelector('.player-bar .now-play-meta .artist').innerText = an || '—';
+  document.getElementById('mpName').innerText   = sn;
+  document.getElementById('mpArtist').innerText = an || '—';
+  updatePlayerCover(getCoverSrc(sn, an));
+  updatePlayerHeartIcon();
+  document.getElementById('miniPlayer').classList.add('active');
+  updateTrackPlayIcon();
+
+  const uploaded = JSON.parse(localStorage.getItem('uploadedSongs') || '[]');
+  const ls = uploaded.find(s => s.name === sn && s.artist === an);
+  if (ls && ls.audioFile && ls.audioFile.startsWith('data:')) {
+    audioElement.src = ls.audioFile;
+    audioElement.play().catch(() => {});
+    setPlayState(true);
+    saveCurrentAudioSrc(ls.audioFile, ls.audioType || 'audio/mpeg');
+    return;
+  }
+  if (db) {
+    try {
+      const songs = await getAllSongsFromDB();
+      const s = songs.find(x => x.name === sn && x.artist === an);
+      if (s && s.audioFile) {
+        const mime = s.audioType || 'audio/mpeg';
+        const blob = new Blob([s.audioFile], { type: mime });
+        audioElement.src = URL.createObjectURL(blob);
+        audioElement.play().catch(() => {});
+        setPlayState(true);
+        try { saveCurrentAudioSrc(arrayBufferToBase64DataUrl(s.audioFile, mime), mime); } catch {}
+        return;
+      }
+    } catch (e) { console.error(e); }
+  }
+  setPlayState(false);
+  showToast('ไม่พบไฟล์เสียงของเพลงนี้');
+}
+
+function saveOrderForQueue(list) {
+  localStorage.setItem(ORDER_KEY, JSON.stringify(list.map(s => ({ name: s.title, artist: s.artist || '' }))));
+}
+
+/* ══════════════════════════════════════════
+   Progress bar
+══════════════════════════════════════════ */
+const pbWrap = document.querySelector('.progress-bar-wrap');
+const pbFill = document.querySelector('.progress-fill');
+const mpFill = document.getElementById('mpProgressFill');
+let seekDrag = false;
+
+function fmtTime(s) { return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`; }
+
+audioElement.addEventListener('timeupdate', () => {
+  if (seekDrag || !audioElement.duration) return;
+  const p = (audioElement.currentTime / audioElement.duration) * 100;
+  if (pbFill) pbFill.style.width = p + '%';
+  if (mpFill) mpFill.style.width = p + '%';
+  const ts = document.querySelectorAll('.progress-row .prog-time');
+  if (ts[0]) ts[0].textContent = fmtTime(audioElement.currentTime);
+  if (ts[1]) ts[1].textContent = fmtTime(audioElement.duration || 0);
+});
+
+audioElement.addEventListener('ended', () => { setPlayState(false); playByOffset(+1); });
+
+function seekAt(e) {
+  const r = pbWrap.getBoundingClientRect();
+  const p = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  if (audioElement.duration) {
+    audioElement.currentTime = p * audioElement.duration;
+    if (pbFill) pbFill.style.width = (p * 100) + '%';
+    if (mpFill) mpFill.style.width = (p * 100) + '%';
+  }
+}
+if (pbWrap) {
+  pbWrap.addEventListener('mousedown',  e => { seekDrag = true;  seekAt(e); });
+  pbWrap.addEventListener('mousemove',  e => { if (seekDrag) seekAt(e); });
+  document.addEventListener('mouseup',  ()  => { seekDrag = false; });
+  pbWrap.addEventListener('touchstart', e => { seekDrag = true;  seekAt(e.touches[0]); }, { passive: true });
+  pbWrap.addEventListener('touchmove',  e => { if (seekDrag) seekAt(e.touches[0]); }, { passive: true });
+  document.addEventListener('touchend', ()  => { seekDrag = false; });
+}
+
+/* ══════════════════════════════════════════
+   Play All / Toggle Like
+══════════════════════════════════════════ */
+function playAllSongs() {
+  const list = getActiveList();
+  if (!list.length) return;
+  if (currentPlayIndex >= 0) { setPlayState(!playing); return; }
+  playByIndex(0);
+}
+
+/* กดหัวใจที่แถวเพลงในลิสต์ — เพิ่ม/นำออกจาก "เพลงที่ชอบ" จริง */
+function toggleLike(el, event) {
+  event.stopPropagation();
+  const row = el.closest('.track-item');
+  const idx = parseInt(row.dataset.idx);
+  const song = currentSongList[idx];
+  if (!song) return;
+
+  const liked = toggleLikedSong(song.title, song.artist);
+  const icon = el.querySelector('i');
+  icon.className = liked ? 'ti ti-heart-filled' : 'ti ti-heart';
+
+  showToast(liked
+    ? `เพิ่ม "${song.title}" ลงเพลงที่ชอบแล้ว`
+    : `นำ "${song.title}" ออกจากเพลงที่ชอบแล้ว`);
+
+  updatePlayerHeartIcon();
+
+  /* ถ้าอยู่หน้าเพลงที่ชอบ และกดเอาออก → รายการต้องหายไปทันที */
+  if (isLikedPage && !liked) {
+    renderSections();
+  }
+}
+
+/* ══════════════════════════════════════════
+   Modal
+══════════════════════════════════════════ */
+function openDeleteModal()  { document.getElementById('delete-modal').classList.add('open'); }
+function closeDeleteModal() { document.getElementById('delete-modal').classList.remove('open'); }
+function confirmDelete() {
+  if (currentPlaylistId === null) return;
+  const pls = loadPlaylists().filter(p => String(p.id) !== String(currentPlaylistId));
+  localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(pls));
+  closeDeleteModal();
+  window.location.href = 'คลังเพลง.html';
+}
+document.getElementById('delete-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeDeleteModal();
+});
+
+/* ══════════════════════════════════════════
+   Init
+══════════════════════════════════════════ */
+async function init() {
+  if (initDone) return;
+  initDone = true;
+
+  initHeader();
+  allSongs = await loadAllSongs();
+  renderSections();
+
+  /* แสดง player bar desktop ถ้ามีเพลงใน localStorage (ปกติ)
+     แต่ mini player มือถือ — แสดงเฉพาะเมื่อ audio กำลังเล่นจริงๆ เท่านั้น */
+  const curName   = localStorage.getItem('currentSongName');
+  const curArtist = localStorage.getItem('currentArtistName') || '';
+  if (curName) {
+    document.querySelector('.player-bar .now-play-meta .name').innerText   = curName;
+    document.querySelector('.player-bar .now-play-meta .artist').innerText = curArtist || '—';
+    document.getElementById('mpName').innerText   = curName;
+    document.getElementById('mpArtist').innerText = curArtist || '—';
+    updatePlayerCover(getCoverSrc(curName, curArtist));
+    updatePlayerHeartIcon();
+    /* แสดง mini player เฉพาะถ้ากำลังเล่นอยู่จริง หรือมี audio src โหลดแล้ว */
+    if (playing || (audioElement.src && audioElement.src !== window.location.href)) {
+      document.getElementById('miniPlayer').classList.add('active');
+    }
+  }
+}
+
+openDB().then(() => init());
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    initDone = false;
+    init();
+  }
+});
+</script>
+</body>
+</html>

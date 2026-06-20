@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SoundFlow — ค้นหา</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-primary: #121212;
+    --bg-secondary: #181818;
+    --bg-tertiary: #282828;
+    --text-primary: #ffffff;
+    --text-secondary: #b3b3b3;
+    --text-tertiary: #6a6a6a;
+    --accent: #1DB954;
+    --accent-hover: #1ed760;
+    --border: rgba(255,255,255,0.08);
+    --border-hover: rgba(255,255,255,0.15);
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --sidebar-width: 240px;
+    --player-height: 90px;
+    --mobile-player-height: 64px;
+    --mobile-nav-height: 60px;
+    --font: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+    overflow: hidden;
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) 1fr;
+    grid-template-rows: 1fr var(--player-height);
+    height: 100vh;
+  }
+
+  /* ─── Sidebar ─── */
+  .sidebar {
+    grid-row: 1 / 2;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid var(--border);
+  }
+  .sidebar-logo {
+    padding: 24px 20px 16px;
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  }
+  .logo-icon {
+    width: 32px; height: 32px; background: var(--accent); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .logo-icon i { font-size: 15px; color: #000; }
+  .logo-text { font-size: 16px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.3px; }
+  .sidebar-nav { padding: 0 12px 8px; flex-shrink: 0; }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px; border-radius: var(--radius-md);
+    cursor: pointer; transition: background 0.15s;
+    margin-bottom: 2px; text-decoration: none; color: inherit;
+  }
+  .nav-item:hover { background: var(--bg-tertiary); }
+  .nav-item.active { background: var(--bg-tertiary); }
+  .nav-item i { font-size: 20px; color: var(--text-secondary); flex-shrink: 0; }
+  .nav-item.active i { color: var(--text-primary); }
+  .nav-item span { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+  .nav-item.active span { color: var(--text-primary); }
+  .sidebar-divider { height: 1px; background: var(--border); margin: 8px 12px; flex-shrink: 0; }
+  .sidebar-section { padding: 8px 20px 6px; flex-shrink: 0; }
+  .sidebar-section-label {
+    font-size: 10px; font-weight: 700; color: var(--text-tertiary);
+    letter-spacing: 1px; text-transform: uppercase; margin-bottom: 12px;
+  }
+  .sidebar-playlists {
+    flex: 1; overflow-y: auto; padding: 0 12px 12px;
+    scrollbar-width: thin; scrollbar-color: var(--bg-tertiary) transparent;
+  }
+  .sidebar-playlists::-webkit-scrollbar { width: 4px; }
+  .sidebar-playlists::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 2px; }
+  .playlist-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px; border-radius: var(--radius-md);
+    cursor: pointer; transition: background 0.15s; margin-bottom: 2px;
+  }
+  .playlist-item:hover { background: var(--bg-tertiary); }
+  .playlist-thumb {
+    width: 40px; height: 40px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .playlist-thumb i { font-size: 17px; color: rgba(255,255,255,0.75); }
+  .playlist-thumb.p1 { background: #c84b31; }
+  .playlist-thumb.p2 { background: #2d6a9f; }
+  .playlist-thumb.p3 { background: #5c3d8f; }
+  .playlist-thumb.p4 { background: #1a7a4a; }
+  .playlist-meta { flex: 1; min-width: 0; }
+  .playlist-name { font-size: 13px; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .playlist-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 1px; }
+
+  /* ─── Main ─── */
+  .main {
+    grid-column: 2; grid-row: 1 / 2;
+    overflow-y: auto; background: var(--bg-primary);
+    scrollbar-width: thin; scrollbar-color: var(--bg-tertiary) transparent;
+  }
+  .main::-webkit-scrollbar { width: 6px; }
+  .main::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 3px; }
+
+  .main-header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(18,18,18,0.9); backdrop-filter: blur(12px);
+    padding: 16px 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .main-header-left { display: flex; gap: 8px; align-items: center; flex: 1; max-width: 440px; }
+  .nav-btn {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--bg-secondary);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: border-color 0.15s, background 0.15s; flex-shrink: 0;
+  }
+  .nav-btn:hover { background: var(--bg-tertiary); border-color: var(--border-hover); }
+  .nav-btn i { font-size: 15px; color: var(--text-secondary); }
+  .search-wrapper {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: 24px; padding: 10px 14px; width: 100%;
+    margin-left: 8px; transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  }
+  .search-wrapper:focus-within {
+    border-color: var(--accent);
+    background: var(--bg-tertiary);
+    box-shadow: 0 0 0 3px rgba(29,185,84,0.15);
+  }
+  .search-wrapper i.ti-search { font-size: 16px; color: var(--text-secondary); flex-shrink: 0; }
+  .search-input {
+    background: transparent; border: none; color: var(--text-primary);
+    font-size: 14px; width: 100%; outline: none; font-family: var(--font);
+  }
+  .search-input::placeholder { color: var(--text-tertiary); }
+  .search-clear-btn {
+    display: none; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--bg-tertiary); color: var(--text-secondary);
+    cursor: pointer; flex-shrink: 0; transition: background 0.15s, color 0.15s;
+  }
+  .search-clear-btn:hover { background: #3a3a3a; color: #fff; }
+  .search-clear-btn.show { display: flex; }
+  .search-clear-btn i { font-size: 13px; }
+  .main-header-right { display: flex; align-items: center; gap: 12px; }
+
+  /* ─── Section ─── */
+  .section { padding: 24px 28px; animation: fadeIn 0.25s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .section-title { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; }
+
+  /* ─── Genre Grid ─── */
+  .genre-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 16px;
+  }
+  .genre-card { height: 140px; border-radius: var(--radius-lg); padding: 16px; position: relative; overflow: hidden; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+  .genre-card:hover { transform: scale(1.03); box-shadow: 0 10px 24px rgba(0,0,0,0.35); }
+  .genre-name { font-size: 16px; font-weight: 700; color: #fff; word-break: break-word; line-height: 1.3; }
+  .genre-card i { position: absolute; font-size: 56px; color: rgba(255,255,255,0.18); bottom: -10px; right: -10px; transform: rotate(15deg); }
+  .g1 { background: #e8115b; } .g2 { background: #148a08; } .g3 { background: #1e3264; }
+  .g4 { background: #e95a13; } .g5 { background: #7d4b32; } .g6 { background: #b49bc8; }
+  .g7 { background: #608108; } .g8 { background: #0d73ec; }
+
+  /* ─── Results Section ─── */
+  .results-label {
+    font-size: 11px; font-weight: 700; color: var(--text-tertiary);
+    letter-spacing: 1px; text-transform: uppercase; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .results-count {
+    font-size: 11px; font-weight: 600; color: var(--text-tertiary);
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1px 8px;
+  }
+  .results-block { margin-bottom: 32px; }
+
+  /* ─── Playlist Result Cards ─── */
+  .pl-results-row { display: flex; gap: 14px; flex-wrap: wrap; }
+  .pl-result-card {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 10px 14px;
+    cursor: pointer; text-decoration: none; color: inherit;
+    transition: background 0.15s, border-color 0.15s, transform 0.15s;
+    min-width: 220px; flex: 1 1 220px; max-width: 340px;
+  }
+  .pl-result-card:hover { background: var(--bg-tertiary); border-color: var(--border-hover); transform: translateY(-1px); }
+  .pl-result-thumb {
+    width: 44px; height: 44px; border-radius: var(--radius-sm);
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    background: var(--bg-tertiary); overflow: hidden;
+  }
+  .pl-result-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .pl-result-thumb i { font-size: 20px; color: var(--accent); }
+  .pl-result-meta .name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+  .pl-result-meta .sub  { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+  .pl-result-meta .badge {
+    display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.8px;
+    text-transform: uppercase; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 3px; padding: 1px 5px;
+    margin-bottom: 4px;
+  }
+
+  /* ─── Track List UI ─── */
+  .track-item {
+    display: grid; grid-template-columns: 32px 1fr 140px 90px 36px;
+    gap: 10px; padding: 8px 10px; align-items: center;
+    border-radius: var(--radius-md); cursor: pointer; transition: background 0.12s;
+    margin-bottom: 2px; text-decoration: none; color: inherit;
+  }
+  .track-item:hover { background: var(--bg-secondary); }
+  .track-num { font-size: 14px; color: var(--text-tertiary); text-align: center; }
+  .track-info { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .track-img {
+    width: 44px; height: 44px; border-radius: var(--radius-sm);
+    background: var(--bg-tertiary); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+  .track-img i { font-size: 17px; color: var(--text-secondary); }
+  .track-img img { width: 100%; height: 100%; object-fit: cover; }
+  .track-img.t1 { background: #c84b31; } .track-img.t2 { background: #2d6a9f; }
+  .track-img.t3 { background: #5c3d8f; } .track-img.t4 { background: #1a7a4a; }
+  .track-img.t5 { background: #b5451b; }
+  .track-text { min-width: 0; }
+  .track-text .name { font-size: 14px; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track-text .artist { font-size: 12px; color: var(--text-secondary); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track-album { font-size: 13px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track-dur { font-size: 13px; color: var(--text-secondary); text-align: right; }
+  .track-like {
+    display: flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 50%;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .track-like:hover { background: rgba(255,255,255,0.08); }
+  .track-like:active { transform: scale(0.88); }
+  .track-like i { font-size: 17px; color: var(--text-tertiary); transition: color 0.15s; }
+  .track-item:hover .track-like i { color: var(--text-secondary); }
+  .track-like.liked i { color: var(--accent) !important; }
+  .track-like.pop i { animation: heartPop 0.28s ease; }
+  @keyframes heartPop { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
+
+  /* ─── No Results ─── */
+  .no-results { text-align: center; padding: 48px 20px; color: var(--text-secondary); }
+  .no-results i { font-size: 48px; opacity: 0.25; display: block; margin-bottom: 14px; }
+  .no-results p { font-size: 14px; }
+  .no-results .hint { font-size: 12px; color: var(--text-tertiary); margin-top: 6px; }
+
+  /* ─── Player Bar ─── */
+  .player-bar {
+    grid-column: 1 / 3; grid-row: 2 / 3;
+    background: #0a0a0a; border-top: 1px solid var(--border);
+    display: grid; grid-template-columns: 280px 1fr 220px;
+    align-items: center; padding: 0 24px;
+  }
+  .player-left { display: flex; align-items: center; gap: 12px; }
+  .now-play-img { width: 48px; height: 48px; border-radius: var(--radius-sm); background: #2d6a9f; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .now-play-img i { font-size: 20px; color: rgba(255,255,255,0.75); }
+  .now-play-meta { min-width: 0; }
+  .now-play-meta .name { font-size: 13px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .now-play-meta .artist { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+  .player-heart i { font-size: 18px; color: var(--accent); margin-left: 4px; }
+  .player-center { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .player-controls { display: flex; align-items: center; gap: 20px; }
+  .ctrl-btn { display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .ctrl-btn i { font-size: 20px; color: var(--text-secondary); }
+  .ctrl-btn.primary { width: 36px; height: 36px; background: var(--text-primary); border-radius: 50%; }
+  .ctrl-btn.primary i { font-size: 17px; color: #000; }
+  .progress-row { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 380px; }
+  .prog-time { font-size: 11px; color: var(--text-tertiary); min-width: 32px; }
+  .progress-bar-wrap { flex: 1; height: 4px; background: var(--bg-tertiary); border-radius: 2px; }
+  .progress-fill { width: 38%; height: 100%; background: var(--text-secondary); border-radius: 2px; }
+  .player-right { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
+  .vol-bar { width: 80px; height: 4px; background: var(--bg-tertiary); border-radius: 2px; }
+  .vol-fill { width: 65%; height: 100%; background: var(--text-secondary); border-radius: 2px; }
+
+  .mobile-player { display: none; }
+  .bottom-nav { display: none; }
+
+  /* ══════════════════════════════
+     MOBILE RESPONSIVE ≤ 768px
+  ══════════════════════════════ */
+  @media (max-width: 768px) {
+    html, body { overflow: hidden; }
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr var(--mobile-nav-height);
+      height: 100vh;
+      padding-bottom: 0;
+    }
+    .sidebar { display: none; }
+    .player-bar { display: none; }
+    .main { grid-column: 1; grid-row: 1 / 2; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 24px; }
+    .main-header { padding: 12px 16px; }
+    .main-header-left { max-width: none; }
+    .search-wrapper { margin-left: 0; }
+    .section { padding: 16px; }
+    .genre-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .genre-card { height: 100px; padding: 12px; }
+    .genre-name { font-size: 14px; }
+    .genre-card i { font-size: 44px; }
+    .track-item { grid-template-columns: 1fr 36px; gap: 8px; padding: 8px; }
+    .track-num { display: none; }
+    .track-album { display: none; }
+    .track-dur { display: none; }
+    .pl-result-card { min-width: 0; flex: 1 1 100%; max-width: 100%; }
+
+    .bottom-nav {
+      display: flex; position: fixed; bottom: 0; left: 0; right: 0;
+      height: var(--mobile-nav-height); background: #000; border-top: 1px solid var(--border); z-index: 101;
+    }
+    .bn-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; cursor: pointer; text-decoration: none; color: inherit; }
+    .bn-item i { font-size: 22px; color: var(--text-tertiary); }
+    .bn-item span { font-size: 10px; color: var(--text-tertiary); font-weight: 500; }
+    .bn-item.active i, .bn-item.active span { color: var(--text-primary); }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon"><i class="ti ti-player-play"></i></div>
+      <span class="logo-text">SoundFlow</span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="index.html" class="nav-item"><i class="ti ti-home"></i><span>หน้าแรก</span></a>
+      <a href="ค้นหาเพลง.html" class="nav-item active"><i class="ti ti-search"></i><span>ค้นหา</span></a>
+      <a href="คลังเพลง.html" class="nav-item"><i class="ti ti-library"></i><span>คลังเพลง</span></a>
+    </nav>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section"><div class="sidebar-section-label">Playlist ของฉัน</div></div>
+    <div class="sidebar-playlists" id="sidebarPlaylists">
+      <a href="เพลงที่ชอบ.html" class="playlist-item">
+        <div class="playlist-thumb p1"><i class="ti ti-heart"></i></div>
+        <div class="playlist-meta"><div class="playlist-name">เพลงที่ชอบ</div><div class="playlist-sub">เพลย์ลิสต์</div></div>
+      </a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="main-header">
+      <div class="main-header-left">
+        <div class="nav-btn" onclick="history.back()"><i class="ti ti-arrow-left"></i></div>
+        <div class="search-wrapper">
+          <i class="ti ti-search"></i>
+          <input type="text" class="search-input" id="searchInput" placeholder="ค้นหาเพลง ศิลปิน เพลย์ลิสต์..." autocomplete="off">
+          <div class="search-clear-btn" id="searchClearBtn"><i class="ti ti-x"></i></div>
+        </div>
+      </div>
+      <div class="main-header-right"></div>
+    </header>
+
+    <!-- Genre Section (default) -->
+    <section class="section" id="genreSection">
+      <div class="section-title">หมวดหมู่ทั้งหมด</div>
+      <div class="genre-grid">
+        <div class="genre-card g1"><div class="genre-name">เพลงไทย<br>ยอดฮิต</div><i class="ti ti-music"></i></div>
+        <div class="genre-card g2"><div class="genre-name">ป๊อป</div><i class="ti ti-microphone"></i></div>
+        <div class="genre-card g3"><div class="genre-name">อินดี้ /<br>ออลเทอร์นาทิฟ</div><i class="ti ti-guitar-pick"></i></div>
+        <div class="genre-card g4"><div class="genre-name">ฮิปฮอป / RAP</div><i class="ti ti-device-audio-tape"></i></div>
+        <div class="genre-card g5"><div class="genre-name">โฟกัส /<br>อ่านหนังสือ</div><i class="ti ti-book"></i></div>
+        <div class="genre-card g6"><div class="genre-name">ผ่อนคลาย</div><i class="ti ti-leaf"></i></div>
+        <div class="genre-card g7"><div class="genre-name">ร็อก</div><i class="ti ti-amp"></i></div>
+        <div class="genre-card g8"><div class="genre-name">เกมมิ่ง</div><i class="ti ti-device-gamepad-2"></i></div>
+      </div>
+    </section>
+
+    <!-- Results Section (shown when searching) -->
+    <section class="section" id="resultsSection" style="display:none;">
+      <div class="section-title" id="resultsTitle">ผลการค้นหาสำหรับ ""</div>
+
+      <!-- Playlists results -->
+      <div class="results-block" id="playlistsBlock" style="display:none;">
+        <div class="results-label">เพลย์ลิสต์ <span class="results-count" id="playlistsCount">0</span></div>
+        <div class="pl-results-row" id="playlistsResults"></div>
+      </div>
+
+      <!-- Songs results -->
+      <div class="results-block" id="songsBlock" style="display:none;">
+        <div class="results-label">เพลง <span class="results-count" id="songsCount">0</span></div>
+        <div id="songsResults"></div>
+      </div>
+
+      <!-- No results -->
+      <div class="no-results" id="noResults" style="display:none;">
+        <i class="ti ti-search"></i>
+        <p>ไม่พบผลการค้นหา</p>
+        <div class="hint">ลองค้นหาด้วยคำอื่น หรือตรวจสอบการสะกดคำ</div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="player-bar">
+    <div class="player-left">
+      <div class="now-play-img"><i class="ti ti-wave-sine"></i></div>
+      <div class="now-play-meta">
+        <div class="name" id="playerName">-</div>
+        <div class="artist" id="playerArtist">ไม่มีเพลงที่กำลังเล่น</div>
+      </div>
+      <div class="player-heart"><i class="ti ti-heart-filled"></i></div>
+    </div>
+    <div class="player-center">
+      <div class="player-controls">
+        <div class="ctrl-btn"><i class="ti ti-arrows-shuffle"></i></div>
+        <div class="ctrl-btn"><i class="ti ti-player-skip-back"></i></div>
+        <div class="ctrl-btn primary"><i class="ti ti-player-pause"></i></div>
+        <div class="ctrl-btn"><i class="ti ti-player-skip-forward"></i></div>
+        <div class="ctrl-btn"><i class="ti ti-repeat"></i></div>
+      </div>
+      <div class="progress-row">
+        <span class="prog-time">1:24</span>
+        <div class="progress-bar-wrap"><div class="progress-fill"></div></div>
+        <span class="prog-time">3:42</span>
+      </div>
+    </div>
+    <div class="player-right">
+      <div class="vol-bar"><div class="vol-fill"></div></div>
+    </div>
+  </footer>
+</div>
+
+<nav class="bottom-nav">
+  <a href="index.html" class="bn-item"><i class="ti ti-home"></i><span>หน้าแรก</span></a>
+  <div class="bn-item active"><i class="ti ti-search"></i><span>ค้นหา</span></div>
+  <a href="คลังเพลง.html" class="bn-item"><i class="ti ti-library"></i><span>คลัง</span></a>
+</nav>
+
+<script>
+/* ══════════════════════════════════════════════
+   IndexedDB — อ่านเพลงทั้งหมด
+══════════════════════════════════════════════ */
+let db = null;
+const dbReq = indexedDB.open('SoundFlowDB', 1);
+dbReq.onupgradeneeded = e => {
+  db = e.target.result;
+  if (!db.objectStoreNames.contains('songs'))
+    db.createObjectStore('songs', { keyPath: 'id', autoIncrement: true });
+};
+dbReq.onsuccess = e => { db = e.target.result; };
+dbReq.onerror   = () => {};
+
+function getAllSongsFromDB() {
+  return new Promise((res, rej) => {
+    if (!db) return res([]);
+    try {
+      const tx  = db.transaction(['songs'], 'readonly');
+      const req = tx.objectStore('songs').getAll();
+      req.onsuccess = () => res(req.result || []);
+      req.onerror   = () => res([]);
+    } catch { res([]); }
+  });
+}
+
+/* ══════════════════════════════════════════════
+   เพลงที่ชอบ (Liked) — ใช้ key เดียวกับ song.html
+   เก็บเป็น [{ name, artist }]
+══════════════════════════════════════════════ */
+const LIKED_KEY = 'sf_liked_songs';
+
+function loadLikedSongs() {
+  try { return JSON.parse(localStorage.getItem(LIKED_KEY)) || []; }
+  catch { return []; }
+}
+
+function saveLikedSongs(list) {
+  localStorage.setItem(LIKED_KEY, JSON.stringify(list));
+}
+
+function isSongLiked(name, artist) {
+  return loadLikedSongs().some(s => s.name === name && (s.artist || '') === (artist || ''));
+}
+
+/** toggle และคืนค่าสถานะใหม่ (true = ถูกใจแล้ว) */
+function toggleLikedSong(name, artist) {
+  const list = loadLikedSongs();
+  const idx  = list.findIndex(s => s.name === name && (s.artist || '') === (artist || ''));
+  let liked;
+  if (idx !== -1) {
+    list.splice(idx, 1);
+    liked = false;
+  } else {
+    list.push({ name, artist: artist || '' });
+    liked = true;
+  }
+  saveLikedSongs(list);
+  return liked;
+}
+
+/* ══════════════════════════════════════════════
+   รวบรวมข้อมูล
+══════════════════════════════════════════════ */
+async function getAllSongs() {
+  // จาก localStorage
+  let songs = [];
+  try { songs = JSON.parse(localStorage.getItem('uploadedSongs') || '[]'); } catch {}
+
+  // จาก IndexedDB (เพิ่มถ้าไม่ซ้ำ)
+  const dbSongs = await getAllSongsFromDB();
+  dbSongs.forEach(s => {
+    if (!songs.some(x => x.name === s.name && (x.artist || '') === (s.artist || '')))
+      songs.push({ name: s.name, artist: s.artist, album: s.album, duration: s.duration });
+  });
+  return songs;
+}
+
+function getAllPlaylists() {
+  try { return JSON.parse(localStorage.getItem('sf_playlists') || '[]'); } catch { return []; }
+}
+
+function getCover(name, artist) {
+  return localStorage.getItem(`cover_${name}_${artist}`) || null;
+}
+
+/* ══════════════════════════════════════════════
+   Render ผลลัพธ์
+══════════════════════════════════════════════ */
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+const colors = ['t1','t2','t3','t4','t5'];
+
+function renderPlaylistResult(pl) {
+  const songCount = pl.songs && pl.songs.length ? `${pl.songs.length} เพลง` : 'ยังไม่มีเพลง';
+  const coverHtml = pl.cover
+    ? `<img src="${escHtml(pl.cover)}" alt="">`
+    : `<i class="ti ti-music"></i>`;
+
+  const a = document.createElement('a');
+  a.href = `เพลงที่ชอบ.html?id=${encodeURIComponent(pl.id)}`;
+  a.className = 'pl-result-card';
+  a.innerHTML = `
+    <div class="pl-result-thumb">${coverHtml}</div>
+    <div class="pl-result-meta">
+      <div class="badge">เพลย์ลิสต์</div>
+      <div class="name">${escHtml(pl.name)}</div>
+      <div class="sub">${songCount}</div>
+    </div>
+  `;
+  return a;
+}
+
+function renderSongResult(song, idx) {
+  const cover = getCover(song.name, song.artist) || song.coverImage || null;
+  const imgHtml = cover
+    ? `<div class="track-img"><img src="${escHtml(cover)}" alt=""></div>`
+    : `<div class="track-img ${colors[idx % colors.length]}"><i class="ti ti-music"></i></div>`;
+
+  const liked = isSongLiked(song.name, song.artist);
+
+  const a = document.createElement('a');
+  // ไปหน้า song.html พร้อมส่ง query string ชื่อเพลง+ศิลปิน
+  a.href = `song.html?name=${encodeURIComponent(song.name)}&artist=${encodeURIComponent(song.artist || '')}`;
+  a.className = 'track-item';
+  a.innerHTML = `
+    <div class="track-num">${idx + 1}</div>
+    <div class="track-info">
+      ${imgHtml}
+      <div class="track-text">
+        <div class="name">${escHtml(song.name)}</div>
+        <div class="artist">${escHtml(song.artist || 'Unknown Artist')}</div>
+      </div>
+    </div>
+    <div class="track-album">${escHtml(song.album || '')}</div>
+    <div class="track-dur">${escHtml(song.duration || '')}</div>
+    <div class="track-like${liked ? ' liked' : ''}">
+      <i class="ti ${liked ? 'ti-heart-filled' : 'ti-heart'}"></i>
+    </div>
+  `;
+
+  // บันทึกว่าเพลงนี้คือเพลงปัจจุบัน แล้วค่อย navigate
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    localStorage.setItem('currentSongName',   song.name);
+    localStorage.setItem('currentArtistName', song.artist || '');
+    window.location.href = a.href;
+  });
+
+  // กดหัวใจในผลค้นหา → toggle ทันที ไม่ต้องเข้าหน้าเพลง
+  const heartBtn = a.querySelector('.track-like');
+  heartBtn.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const nowLiked = toggleLikedSong(song.name, song.artist || '');
+    heartBtn.classList.toggle('liked', nowLiked);
+    heartBtn.querySelector('i').className = `ti ${nowLiked ? 'ti-heart-filled' : 'ti-heart'}`;
+    heartBtn.classList.remove('pop');
+    // force reflow เพื่อให้เล่นอนิเมชันใหม่ได้ทุกครั้ง
+    void heartBtn.offsetWidth;
+    heartBtn.classList.add('pop');
+  });
+
+  return a;
+}
+
+/* ══════════════════════════════════════════════
+   ค้นหา
+══════════════════════════════════════════════ */
+let allSongs = [];
+let allPlaylists = [];
+
+async function init() {
+  allSongs     = await getAllSongs();
+  allPlaylists = getAllPlaylists();
+  renderSidebar();
+
+  // แสดงผลทันทีถ้า URL มี ?q=
+  const params = new URLSearchParams(location.search);
+  const q = params.get('q') || '';
+  if (q) {
+    document.getElementById('searchInput').value = q;
+    doSearch(q);
+  }
+  updateClearBtn();
+}
+
+function doSearch(rawQuery) {
+  const q = rawQuery.trim().toLowerCase();
+  const genreSection   = document.getElementById('genreSection');
+  const resultsSection = document.getElementById('resultsSection');
+  const resultsTitle   = document.getElementById('resultsTitle');
+
+  if (!q) {
+    genreSection.style.display   = '';
+    resultsSection.style.display = 'none';
+    return;
+  }
+
+  genreSection.style.display   = 'none';
+  resultsSection.style.display = '';
+  resultsTitle.textContent = `ผลการค้นหาสำหรับ "${rawQuery.trim()}"`;
+
+  // กรองเพลง
+  const matchSongs = allSongs.filter(s =>
+    (s.name   || '').toLowerCase().includes(q) ||
+    (s.artist || '').toLowerCase().includes(q) ||
+    (s.album  || '').toLowerCase().includes(q)
+  );
+
+  // กรองเพลย์ลิสต์
+  const matchPlaylists = allPlaylists.filter(pl =>
+    (pl.name || '').toLowerCase().includes(q)
+  );
+
+  // Playlist block
+  const plBlock = document.getElementById('playlistsBlock');
+  const plRow   = document.getElementById('playlistsResults');
+  plRow.innerHTML = '';
+  if (matchPlaylists.length) {
+    plBlock.style.display = '';
+    document.getElementById('playlistsCount').textContent = matchPlaylists.length;
+    matchPlaylists.forEach(pl => plRow.appendChild(renderPlaylistResult(pl)));
+  } else {
+    plBlock.style.display = 'none';
+  }
+
+  // Songs block
+  const sBlock   = document.getElementById('songsBlock');
+  const sResults = document.getElementById('songsResults');
+  sResults.innerHTML = '';
+  if (matchSongs.length) {
+    sBlock.style.display = '';
+    document.getElementById('songsCount').textContent = matchSongs.length;
+    matchSongs.forEach((song, i) => sResults.appendChild(renderSongResult(song, i)));
+  } else {
+    sBlock.style.display = 'none';
+  }
+
+  // No results
+  const noRes = document.getElementById('noResults');
+  noRes.style.display = (!matchSongs.length && !matchPlaylists.length) ? '' : 'none';
+}
+
+/* ══════════════════════════════════════════════
+   Sidebar Playlists
+══════════════════════════════════════════════ */
+function renderSidebar() {
+  const sidebar = document.getElementById('sidebarPlaylists');
+  // เก็บ liked songs ไว้
+  const liked = sidebar.querySelector('a[href="เพลงที่ชอบ.html"]');
+  sidebar.innerHTML = '';
+  if (liked) sidebar.appendChild(liked);
+
+  allPlaylists.slice().reverse().forEach(pl => {
+    const songCount = pl.songs && pl.songs.length ? `${pl.songs.length} เพลง` : 'ยังไม่มีเพลง';
+    const item = document.createElement('a');
+    item.href = `เพลงที่ชอบ.html?id=${encodeURIComponent(pl.id)}`;
+    item.className = 'playlist-item';
+    const thumbContent = pl.cover
+      ? `<img src="${escHtml(pl.cover)}" alt="" style="width:100%;height:100%;object-fit:cover;">`
+      : `<i class="ti ti-music" style="color:var(--accent);"></i>`;
+    item.innerHTML = `
+      <div class="playlist-thumb" style="background:var(--bg-tertiary);">${thumbContent}</div>
+      <div class="playlist-meta">
+        <div class="playlist-name">${escHtml(pl.name)}</div>
+        <div class="playlist-sub">${songCount}</div>
+      </div>
+    `;
+    sidebar.appendChild(item);
+  });
+}
+
+/* ══════════════════════════════════════════════
+   Events
+══════════════════════════════════════════════ */
+const searchInputEl = document.getElementById('searchInput');
+const searchClearEl = document.getElementById('searchClearBtn');
+
+function updateClearBtn() {
+  searchClearEl.classList.toggle('show', !!searchInputEl.value.trim());
+}
+
+searchInputEl.addEventListener('input', e => {
+  doSearch(e.target.value);
+  updateClearBtn();
+});
+
+searchClearEl.addEventListener('click', () => {
+  searchInputEl.value = '';
+  doSearch('');
+  updateClearBtn();
+  searchInputEl.focus();
+});
+
+// ซิงค์สถานะหัวใจใหม่ เมื่อกลับมาที่หน้านี้จากหน้าเพลง (เช่นกด back)
+window.addEventListener('pageshow', () => {
+  const q = searchInputEl.value;
+  if (q.trim()) doSearch(q);
+});
+
+/* ══════════════════════════════════════════════
+   Init
+══════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  // รอ IndexedDB เปิดก่อนสักเล็กน้อย
+  setTimeout(init, 80);
+});
+</script>
+</body>
+</html>
