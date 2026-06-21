@@ -1121,6 +1121,32 @@ function saveCurrentAudioSrc(url, mime) {
   } catch (e) { sessionStorage.removeItem('currentAudioSrc'); }
 }
 
+/* ⚠️ FIX (เครื่องเก่า: canplay fire สำเร็จ ปุ่มขึ้น pause แต่ไม่มีเสียงออกเลย):
+   ที่มา: เพลงที่อัปโหลดไว้ก่อนหน้านี้ (ก่อนแก้ฝั่งหน้าเพิ่มเพลง) อาจมี
+   audioType ผิดพลาดค้างอยู่ใน IndexedDB เช่นค่าว่างหรือ
+   "application/octet-stream" เพราะบางเบราว์เซอร์มือถือรุ่นเก่าอ่าน
+   file.type ผิด พอเอา MIME ผิดไปสร้าง Blob เบราว์เซอร์จะมองว่าไฟล์
+   พร้อมเล่น (fire canplay ได้) แต่ตัวถอดรหัสเสียงไม่รู้ว่าต้อง decode
+   แบบไหน เลยไม่มีเสียงออกมาแบบเงียบ ๆ
+
+   ฟังก์ชันนี้ตรวจสอบ MIME type ที่เก็บไว้ ถ้าไม่ใช่ audio/* ที่รู้จัก
+   จะอนุมานใหม่จากนามสกุลไฟล์แทน เพื่อแก้ปัญหาเพลงเก่าที่อัปโหลดไว้แล้ว
+   โดยไม่ต้องให้ผู้ใช้อัปโหลดใหม่ */
+function getSafeMimeType(storedType, fileName) {
+  const validTypes = ['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/ogg', 'audio/flac', 'audio/webm', 'audio/aac', 'audio/x-m4a'];
+  if (storedType && validTypes.includes(storedType)) return storedType;
+
+  if (fileName) {
+    const ext = fileName.toLowerCase().substring(fileName.lastIndexOf('.'));
+    const mimeMap = {
+      '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4',
+      '.ogg': 'audio/ogg',  '.flac': 'audio/flac', '.webm': 'audio/webm', '.aac': 'audio/aac'
+    };
+    if (mimeMap[ext]) return mimeMap[ext];
+  }
+  return 'audio/mpeg'; // ค่าเริ่มต้นปลอดภัยที่สุด เพราะไฟล์ส่วนใหญ่ที่อัปโหลดเป็น MP3
+}
+
 function getCoverSrc(name, artist) {
   return localStorage.getItem(`cover_${name}_${artist}`) || null;
 }
@@ -1213,7 +1239,7 @@ async function playThisTrack(el) {
       const songs = await getAllSongsFromDB();
       const s = songs.find(x => x.name === sn && x.artist === an);
       if (s && s.audioFile) {
-        const mime = s.audioType || 'audio/mpeg';
+        const mime = getSafeMimeType(s.audioType, s.audioFileName);
         const blob = new Blob([s.audioFile], { type: mime });
         const blobUrl = URL.createObjectURL(blob);
         // เคลียร์ Blob URL ตัวก่อนหน้าทิ้ง ป้องกันหน่วยความจำรั่วสะสม

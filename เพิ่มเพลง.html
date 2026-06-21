@@ -387,6 +387,30 @@
     return idx > 0 ? filename.substring(0, idx) : filename;
   }
 
+  /* ⚠️ FIX (เครื่องเก่า: เล่นไม่ออกเสียงเลย ทั้งที่ canplay fire สำเร็จ):
+     เบราว์เซอร์มือถือรุ่นเก่าบางตัว (รวมถึง MIUI Browser บางเวอร์ชัน)
+     อ่าน file.type ของไฟล์ MP3 ผิดพลาด — บางครั้งคืนค่าว่าง หรือคืนเป็น
+     "application/octet-stream" แทนที่จะเป็น "audio/mpeg" พอเอาค่านี้ไป
+     สร้าง Blob ตอนเล่นเพลง เบราว์เซอร์จะมองว่าพร้อมเล่น (canplay fire)
+     แต่ตัวถอดรหัสเสียงจริงไม่รู้ว่าต้อง decode เป็นเสียงแบบไหน เลยไม่มี
+     เสียงออกมาเลยแบบเงียบ ๆ ไม่มี error ใด ๆ
+
+     วิธีแก้: ไม่พึ่ง file.type จากเบราว์เซอร์เลย กำหนด MIME type เองจาก
+     นามสกุลไฟล์เสมอ ซึ่งแม่นยำกว่าและเบราว์เซอร์ทุกตัวเข้าใจตรงกัน */
+  function getMimeTypeFromFilename(filename) {
+    const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
+    const mimeMap = {
+      '.mp3':  'audio/mpeg',
+      '.wav':  'audio/wav',
+      '.m4a':  'audio/mp4',
+      '.ogg':  'audio/ogg',
+      '.flac': 'audio/flac',
+      '.webm': 'audio/webm',
+      '.aac':  'audio/aac'
+    };
+    return mimeMap[ext] || 'audio/mpeg';
+  }
+
   // ฟังก์ชันจัดการเลือกไฟล์เสียง พร้อมการตรวจสอบ
   function handleAudioSelect(input) {
     if(input.files && input.files[0]) {
@@ -474,10 +498,14 @@
     const reader = new FileReader();
     reader.onload = function(e) {
       const audioArrayBuffer = e.target.result;
-      
+
+      // ใช้ MIME type ที่อนุมานจากนามสกุลไฟล์เสมอ แทน selectedAudioFile.type
+      // เพราะเบราว์เซอร์มือถือบางตัวอ่าน file.type ของ MP3 ผิดพลาด
+      const correctMimeType = getMimeTypeFromFilename(selectedAudioFile.name);
+
       // คำนวณระยะเวลาเพลง
       const audio = new Audio();
-      const blob = new Blob([audioArrayBuffer], { type: selectedAudioFile.type });
+      const blob = new Blob([audioArrayBuffer], { type: correctMimeType });
       const audioURL = URL.createObjectURL(blob);
       audio.src = audioURL;
       
@@ -520,7 +548,7 @@
           duration: duration,
           audioFile: audioArrayBuffer,
           audioFileName: selectedAudioFile.name,
-          audioType: selectedAudioFile.type,
+          audioType: correctMimeType,
           coverImage: selectedCoverImage || null,
           uploadedAt: new Date().toISOString()
         };
