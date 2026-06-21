@@ -540,7 +540,9 @@
       
       function saveSongToDB() {
         URL.revokeObjectURL(audioURL);
-        
+
+        const originalFileSize = audioArrayBuffer.byteLength;
+
         const songData = {
           name: songName,
           artist: artist,
@@ -558,34 +560,78 @@
         const addRequest = objectStore.add(songData);
         
         addRequest.onsuccess = () => {
-          // บันทึก metadata ใน localStorage ด้วย (เพื่อแสดง UI)
-          let uploadedSongs = JSON.parse(localStorage.getItem('uploadedSongs')) || [];
-          uploadedSongs.push({
-            name: songName,
-            artist: artist,
-            album: album,
-            duration: duration,
-            fileName: selectedAudioFile.name,
-            uploadedAt: new Date().toISOString()
-          });
-          localStorage.setItem('uploadedSongs', JSON.stringify(uploadedSongs));
+          const newId = addRequest.result;
 
-          // 🔧 FIX: บันทึกรูปปกลง localStorage ด้วย key cover_<ชื่อเพลง>_<ศิลปิน>
-          // เพื่อให้หน้า index.html (Hero Section / Player Bar) ที่อ่านผ่าน getCoverSrc()
-          // หารูปเจอทันที โดยไม่ต้องพึ่งพา IndexedDB เพียงอย่างเดียว
-          if (selectedCoverImage) {
-            try {
-              localStorage.setItem(`cover_${songName}_${artist}`, selectedCoverImage);
-            } catch (storageErr) {
-              // ถ้ารูปใหญ่เกินจน localStorage เต็ม ก็ไม่ต้องให้การอัปโหลดเพลงล้มเหลวไปด้วย
-              console.warn('ไม่สามารถบันทึกรูปปกลง localStorage (อาจมีขนาดใหญ่เกินไป):', storageErr);
+          /* ⚠️ FIX (เพลงยาว/ไฟล์ใหญ่เล่นไม่ได้เลยทุกครั้ง บนเครื่องรุ่นเก่า):
+             addRequest.onsuccess แปลว่า IndexedDB "รับคำสั่งบันทึก" สำเร็จ
+             เฉยๆ แต่ไม่ได้แปลว่าข้อมูลที่เขียนลงดิสก์จริงสมบูรณ์ 100%
+             เครื่องสเปกต่ำ/พื้นที่เก็บข้อมูลจำกัดบางรุ่น อาจเขียนไฟล์ใหญ่
+             (5MB+) ได้ไม่ครบโดยไม่ throw error ใด ๆ เลย ทำให้เพลงนั้น
+             "เล่นไม่ได้ทุกครั้ง" อย่างเงียบ ๆ ตั้งแต่ตอนอัปโหลด ไม่ใช่
+             ปัญหาที่เกิดตอนเล่นจริง
+
+             จึงเพิ่มขั้นตอนอ่านข้อมูลที่เพิ่งบันทึกกลับมาทันที แล้วเทียบ
+             ขนาดไฟล์เสียงกับต้นฉบับ ถ้าไม่ตรงกัน = เขียนไม่สมบูรณ์ ให้แจ้ง
+             เตือนผู้ใช้ทันทีและลบ record ที่เสียทิ้ง แทนที่จะปล่อยให้
+             ค้างอยู่ในระบบเป็นเพลงที่เล่นไม่ได้ตลอดไป */
+          const verifyTx  = db.transaction(['songs'], 'readonly');
+          const verifyReq = verifyTx.objectStore('songs').get(newId);
+
+          verifyReq.onsuccess = () => {
+            const saved = verifyReq.result;
+            const savedSize = saved && saved.audioFile ? saved.audioFile.byteLength : 0;
+
+            if (!saved || savedSize !== originalFileSize) {
+              // ข้อมูลเสีย/ไม่ครบ — ลบทิ้งและแจ้งผู้ใช้ทันที
+              const cleanupTx = db.transaction(['songs'], 'readwrite');
+              cleanupTx.objectStore('songs').delete(newId);
+
+              event.target.innerText = originalText;
+              event.target.disabled = false;
+              alert('❌ บันทึกไฟล์เสียงไม่สมบูรณ์ (เครื่องอาจมีพื้นที่เก็บข้อมูลไม่พอ หรือไฟล์ใหญ่เกินไปสำหรับเครื่องนี้)\n\nกรุณาลองใหม่อีกครั้ง หรือลองใช้ไฟล์ขนาดเล็กลง');
+              return;
             }
-          }
 
-          event.target.innerText = originalText;
-          event.target.disabled = false;
-          alert('✅ อัปโหลดเพลงเข้าสู่ระบบ SoundFlow เรียบร้อย!');
-          window.location.href = 'index.html';
+            finishUpload();
+          };
+
+          verifyReq.onerror = () => {
+            // อ่านกลับมาตรวจสอบไม่ได้ — ถือว่าไม่ปลอดภัย แจ้งผู้ใช้แทนที่จะเสี่ยงบันทึกเพลงเสีย
+            event.target.innerText = originalText;
+            event.target.disabled = false;
+            alert('❌ ไม่สามารถตรวจสอบความสมบูรณ์ของไฟล์ที่บันทึกได้ กรุณาลองใหม่อีกครั้ง');
+          };
+
+          function finishUpload() {
+            // บันทึก metadata ใน localStorage ด้วย (เพื่อแสดง UI)
+            let uploadedSongs = JSON.parse(localStorage.getItem('uploadedSongs')) || [];
+            uploadedSongs.push({
+              name: songName,
+              artist: artist,
+              album: album,
+              duration: duration,
+              fileName: selectedAudioFile.name,
+              uploadedAt: new Date().toISOString()
+            });
+            localStorage.setItem('uploadedSongs', JSON.stringify(uploadedSongs));
+
+            // 🔧 FIX: บันทึกรูปปกลง localStorage ด้วย key cover_<ชื่อเพลง>_<ศิลปิน>
+            // เพื่อให้หน้า index.html (Hero Section / Player Bar) ที่อ่านผ่าน getCoverSrc()
+            // หารูปเจอทันที โดยไม่ต้องพึ่งพา IndexedDB เพียงอย่างเดียว
+            if (selectedCoverImage) {
+              try {
+                localStorage.setItem(`cover_${songName}_${artist}`, selectedCoverImage);
+              } catch (storageErr) {
+                // ถ้ารูปใหญ่เกินจน localStorage เต็ม ก็ไม่ต้องให้การอัปโหลดเพลงล้มเหลวไปด้วย
+                console.warn('ไม่สามารถบันทึกรูปปกลง localStorage (อาจมีขนาดใหญ่เกินไป):', storageErr);
+              }
+            }
+
+            event.target.innerText = originalText;
+            event.target.disabled = false;
+            alert('✅ อัปโหลดเพลงเข้าสู่ระบบ SoundFlow เรียบร้อย!');
+            window.location.href = 'index.html';
+          }
         };
         
         addRequest.onerror = () => {
@@ -595,6 +641,7 @@
         };
       }
     };
+
 
     reader.onerror = function() {
       event.target.innerText = originalText;
