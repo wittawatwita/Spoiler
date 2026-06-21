@@ -1076,7 +1076,7 @@
     if (e.target === document.getElementById('deleteModal')) closeDeleteModal();
   });
 
-  function confirmDelete() {
+  async function confirmDelete() {
     const songTitle  = document.getElementById('currentSongTitle').innerText;
     const songArtist = document.getElementById('currentArtistName').innerText;
 
@@ -1103,15 +1103,35 @@
     const likedList = loadLikedSongs().filter(s => !(s.name === songTitle && (s.artist || '') === songArtist));
     saveLikedSongs(likedList);
 
+    /* ⚠️ FIX (กดลบแล้ว modal ปิด แต่เพลงยังอยู่เหมือนเดิม):
+       เดิมตรงนี้เรียก getSongFromDB(...).then(...) แบบ "ยิงทิ้งไว้" ไม่รอ
+       ผลลัพธ์ แล้วโค้ดข้างล่าง (playlist.splice, closeDeleteModal,
+       loadAndPlayIndex) รันทันทีโดยไม่รอให้การลบใน IndexedDB เสร็จสมบูรณ์
+       จริงก่อน โดยเฉพาะ loadAndPlayIndex() ที่ถูกเรียกตามมาจะเปิด
+       transaction ใหม่ทันที ซึ่งอาจไปแข่งกับ transaction การลบที่ยังไม่ทัน
+       commit เสร็จ บนเครื่องช้า/เบราว์เซอร์บางตัว ทำให้การลบไม่สำเร็จจริง
+       หรือถูกแซงคิวจนดูเหมือนไม่มีอะไรเกิดขึ้น
+
+       แก้โดยทำทั้งฟังก์ชันเป็น async แล้ว await ให้ transaction การลบ
+       (delete request) เสร็จสมบูรณ์จริง ๆ ก่อน ค่อยไปแตะ playlist/UI/
+       โหลดเพลงถัดไป เพื่อการันตีลำดับการทำงานที่ถูกต้อง */
     if (db) {
-      // ⚠️ FIX: ใช้ getSongFromDB() (cursor หยุดทันทีที่เจอ) แทน getAllSongsFromDB()
-      // เพื่อไม่ต้องโหลดไฟล์เสียงของทุกเพลงเข้าหน่วยความจำแค่จะลบเพลงเดียว
-      getSongFromDB(songTitle, songArtist).then(target => {
+      try {
+        const target = await getSongFromDB(songTitle, songArtist);
         if (target) {
-          const tx = db.transaction(['songs'], 'readwrite');
-          tx.objectStore('songs').delete(target.id);
+          await new Promise((resolve, reject) => {
+            const tx = db.transaction(['songs'], 'readwrite');
+            const delReq = tx.objectStore('songs').delete(target.id);
+            delReq.onsuccess = () => resolve();
+            delReq.onerror   = () => reject(delReq.error);
+            tx.onerror = () => reject(tx.error);
+          });
         }
-      });
+      } catch (err) {
+        console.error('ลบเพลงจาก IndexedDB ไม่สำเร็จ:', err);
+        showSongToast('ลบเพลงไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+        return; // ไม่ไปต่อถ้าลบไม่สำเร็จจริง กันข้อมูลไม่ตรงกันระหว่าง UI กับ DB
+      }
     }
 
     playlist.splice(currentIndex, 1);
