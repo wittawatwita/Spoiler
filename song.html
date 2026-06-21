@@ -428,6 +428,8 @@
 <script>
   const audioElement = document.createElement('audio');
   audioElement.id = 'audioPlayer';
+  audioElement.setAttribute('playsinline', '');
+  audioElement.setAttribute('webkit-playsinline', '');
   document.body.appendChild(audioElement);
 
   let isPlaying  = false;
@@ -436,6 +438,48 @@
 
   let playlist     = [];   // เรียงตาม order เดียวกับหน้าสวยดี
   let currentIndex = 0;
+  let currentBlobUrl = null; // เก็บ Blob URL ปัจจุบันไว้ revoke ทิ้งตอนเปลี่ยนเพลง กันหน่วยความจำรั่ว
+
+  /* แจ้งเตือนผู้ใช้ถ้าเล่นเพลงไม่สำเร็จ แทนที่จะเงียบสนิทเหมือนเดิม */
+  let songPlToastTimer = null;
+  function showSongToast(text) {
+    const toast = document.getElementById('plToast');
+    const textEl = document.getElementById('plToastText');
+    if (!toast || !textEl) return;
+    textEl.textContent = text;
+    toast.classList.add('show');
+    clearTimeout(songPlToastTimer);
+    songPlToastTimer = setTimeout(() => toast.classList.remove('show'), 2400);
+  }
+
+  audioElement.addEventListener('error', () => {
+    console.error('Audio playback error:', audioElement.error);
+    isPlaying = false;
+    setPlayIcon(false);
+    showSongToast('เล่นเพลงนี้ไม่ได้ ไฟล์อาจเสียหายหรือไม่รองรับ');
+  });
+
+  /* ⚠️ FIX (เครื่องเก่า: canplay fire สำเร็จ ปุ่มขึ้น pause แต่ไม่มีเสียงออกเลย):
+     สาเหตุเดียวกับหน้า index.html — Blob ที่สร้างจาก idbSong.audioFile
+     เดิมใช้ idbSong.audioType || 'audio/mpeg' ตรง ๆ ซึ่งบางเบราว์เซอร์
+     มือถือรุ่นเก่าบันทึก MIME type ผิดตอนอัปโหลด (เช่นว่างหรือ
+     "application/octet-stream") ทำให้ Blob เล่นได้ในทางเทคนิคแต่ไม่มี
+     เสียงออกมาเลยแบบเงียบ ๆ ฟังก์ชันนี้ตรวจสอบ MIME type ก่อนใช้งาน
+     ถ้าไม่ใช่ audio/* ที่รู้จัก จะอนุมานใหม่จากนามสกุลไฟล์แทน */
+  function getSafeMimeType(storedType, fileName) {
+    const validTypes = ['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/ogg', 'audio/flac', 'audio/webm', 'audio/aac', 'audio/x-m4a'];
+    if (storedType && validTypes.includes(storedType)) return storedType;
+
+    if (fileName) {
+      const ext = fileName.toLowerCase().substring(fileName.lastIndexOf('.'));
+      const mimeMap = {
+        '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4',
+        '.ogg': 'audio/ogg',  '.flac': 'audio/flac', '.webm': 'audio/webm', '.aac': 'audio/aac'
+      };
+      if (mimeMap[ext]) return mimeMap[ext];
+    }
+    return 'audio/mpeg';
+  }
 
   /* ══════════════════════════════════════════════════════════
      Song Order — อ่าน key เดียวกับหน้าสวยดี.html
@@ -636,8 +680,15 @@
   function togglePlay() {
     isPlaying = !isPlaying;
     setPlayIcon(isPlaying);
-    if (isPlaying) audioElement.play().catch(() => {});
-    else audioElement.pause();
+    if (isPlaying) {
+      audioElement.play().catch(() => {
+        isPlaying = false;
+        setPlayIcon(false);
+        showSongToast('กดเล่นอีกครั้งเพื่อเริ่มเพลง');
+      });
+    } else {
+      audioElement.pause();
+    }
   }
 
   function toggleShuffle(el) {
@@ -916,22 +967,55 @@
     if (!audioSrc) {
       const idbSong = await getSongFromDB(song.title, song.artist);
       if (idbSong && idbSong.audioFile) {
-        const mime = idbSong.audioType || 'audio/mpeg';
+        // ⚠️ FIX: ใช้ getSafeMimeType() แทน idbSong.audioType || 'audio/mpeg' ตรง ๆ
+        // เพื่อแก้ MIME type ที่ผิดพลาดจากการอัปโหลดเดิม ป้องกันเล่นไม่ออกเสียงบนเครื่องเก่า
+        const mime = getSafeMimeType(idbSong.audioType, idbSong.audioFileName);
         const blob = new Blob([idbSong.audioFile], { type: mime });
-        audioSrc   = URL.createObjectURL(blob);
+        // เคลียร์ Blob URL เก่าทิ้งก่อนสร้างใหม่ กันหน่วยความจำรั่วสะสมบนเครื่อง RAM น้อย
+        if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
+        audioSrc = URL.createObjectURL(blob);
+        currentBlobUrl = audioSrc;
       }
     }
 
     if (audioSrc) {
       audioElement.src = audioSrc;
+      audioElement.load();
       audioElement.currentTime = 0;
-      audioElement.play().then(() => {
-        isPlaying = true;
-        setPlayIcon(true);
-      }).catch(() => {
-        isPlaying = false;
-        setPlayIcon(false);
-      });
+
+      // ⚠️ FIX (เครื่องเก่า: ปุ่มขึ้น pause แต่ไม่มีเสียง):
+      // รอ canplay ก่อนเล่นจริง เหมือนที่แก้ในหน้า index.html แทนที่จะ
+      // เรียก play() ทันทีโดยไม่รอให้เครื่องช้า ๆ decode ไฟล์เสร็จก่อน
+      isPlaying = true;
+      setPlayIcon(true);
+      let started = false;
+      const tryPlay = () => {
+        if (started) return;
+        started = true;
+        audioElement.play().then(() => {
+          isPlaying = true;
+          setPlayIcon(true);
+        }).catch(() => {
+          isPlaying = false;
+          setPlayIcon(false);
+          showSongToast('กดเล่นอีกครั้งเพื่อเริ่มเพลง');
+        });
+      };
+      if (audioElement.readyState >= 3) {
+        tryPlay();
+      } else {
+        audioElement.addEventListener('canplay', tryPlay, { once: true });
+        setTimeout(() => {
+          if (!started) {
+            audioElement.removeEventListener('canplay', tryPlay);
+            console.warn('โหลดไฟล์เสียงนานเกินไป — เครื่องอาจช้าหรือไฟล์มีปัญหา');
+            isPlaying = false;
+            started = true;
+            setPlayIcon(false);
+            showSongToast('โหลดเพลงช้ากว่าปกติ ลองกดเล่นอีกครั้ง');
+          }
+        }, 8000);
+      }
     } else {
       isPlaying = false;
       setPlayIcon(false);
@@ -1069,28 +1153,33 @@
     /* ── โหลด audio ── */
     let audioSrc = null;
 
-    const cachedSrc = sessionStorage.getItem('currentAudioSrc');
-    if (cachedSrc) audioSrc = cachedSrc;
+    // ⚠️ FIX: เลิกใช้ sessionStorage.getItem('currentAudioSrc') (base64 cache เดิม)
+    // เพราะหน้า index.html ไม่บันทึก base64 ลง sessionStorage แล้ว (ตัดออกไปแล้ว
+    // เนื่องจากกินหน่วยความจำหนักมากบนเครื่องสเปกต่ำ) ถ้ายังอ่านจาก cache เดิม
+    // ที่อาจเป็นค่าค้างจากเวอร์ชันก่อนหน้า จะได้ src ที่ไม่ตรงกับเพลงปัจจุบัน
+    // จึงข้าม cache นี้ไปเลย แล้วโหลดจาก localStorage/IndexedDB ตรง ๆ เสมอ
 
-    if (!audioSrc) {
-      const lsSong = lsSongs.find(s =>
-        s.name === playlist[currentIndex].title && s.artist === playlist[currentIndex].artist);
-      if (lsSong && lsSong.audioFile && lsSong.audioFile.startsWith('data:'))
-        audioSrc = lsSong.audioFile;
-    }
+    const lsSong = lsSongs.find(s =>
+      s.name === playlist[currentIndex].title && s.artist === playlist[currentIndex].artist);
+    if (lsSong && lsSong.audioFile && lsSong.audioFile.startsWith('data:'))
+      audioSrc = lsSong.audioFile;
 
     if (!audioSrc) {
       const idbSong = await getSongFromDB(playlist[currentIndex].title, playlist[currentIndex].artist);
       if (idbSong && idbSong.audioFile) {
-        const mime = idbSong.audioType || 'audio/mpeg';
+        // ⚠️ FIX: ใช้ getSafeMimeType() แทน idbSong.audioType || 'audio/mpeg' ตรง ๆ
+        const mime = getSafeMimeType(idbSong.audioType, idbSong.audioFileName);
         const blob = new Blob([idbSong.audioFile], { type: mime });
-        audioSrc   = URL.createObjectURL(blob);
+        if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
+        audioSrc = URL.createObjectURL(blob);
+        currentBlobUrl = audioSrc;
       }
     }
 
     if (audioSrc) {
       audioElement.src     = audioSrc;
       audioElement.preload = 'auto';
+      audioElement.load();
 
       let playStarted = false;
       const tryPlay = () => {
@@ -1106,19 +1195,28 @@
         }).catch(() => {
           isPlaying = false;
           setPlayIcon(false);
+          showSongToast('กดเล่นอีกครั้งเพื่อเริ่มเพลง');
         });
       };
 
-      if (audioElement.readyState >= 2) {
+      // ⚠️ FIX (เครื่องเก่า): เดิมถ้า canplay ไม่ทันใน 3 วิ จะบังคับเรียก
+      // tryPlay() ต่อแบบไม่มีเงื่อนไข ซึ่งอาจเล่นไม่ออกเสียงเงียบ ๆ บนเครื่อง
+      // ที่ยังโหลดไม่เสร็จจริง ตอนนี้ขยายเวลารอเป็น 8 วิ (ให้เวลาเครื่องช้า
+      // มากพอ) และถ้ายังไม่พร้อมจริง ๆ จะแจ้งเตือนผู้ใช้แทนที่จะฝืนเล่น
+      if (audioElement.readyState >= 3) {
         tryPlay();
       } else {
         audioElement.addEventListener('canplay', tryPlay, { once: true });
         setTimeout(() => {
           if (!playStarted) {
             audioElement.removeEventListener('canplay', tryPlay);
-            tryPlay();
+            console.warn('โหลดไฟล์เสียงนานเกินไป — เครื่องอาจช้าหรือไฟล์มีปัญหา');
+            playStarted = true;
+            isPlaying = false;
+            setPlayIcon(false);
+            showSongToast('โหลดเพลงช้ากว่าปกติ ลองกดเล่นอีกครั้ง');
           }
-        }, 3000);
+        }, 8000);
       }
     }
   });
