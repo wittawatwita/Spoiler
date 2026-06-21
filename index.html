@@ -1106,6 +1106,58 @@ function getAllSongsFromDB() {
   });
 }
 
+/* ⚠️ FIX (ไฟล์เล็กเล่นได้บางหน้า แต่ไฟล์โตขึ้นเล่นไม่ได้เลยทุกหน้า):
+   เดิม getAllSongsFromDB() จะโหลด "ทุกเพลงในคลัง รวมไฟล์เสียงเต็มทุกไฟล์"
+   เข้าหน่วยความจำพร้อมกันทุกครั้ง แม้จะแค่ต้องการแสดงรายชื่อเพลง หรือ
+   หาเพลงแค่เพลงเดียวมาเล่นก็ตาม พอคลังเพลงมีหลายไฟล์ (เช่น 3MB + 5MB+)
+   ทุกครั้งที่กดเล่นเพลงใดเพลงหนึ่ง เครื่องต้องแบกรับไฟล์เสียงของ "ทุกเพลง
+   รวมกัน" ไว้ในหน่วยความจำชั่วขณะ ซึ่งหนักเกินไปสำหรับเครื่อง RAM น้อย
+   โดยเฉพาะหน้า index.html ที่มี DOM/UI หนักกว่าหน้าอื่นอยู่แล้ว (sidebar,
+   รายการเพลง, รูปปก, hero section ฯลฯ) จึงเหลือพื้นที่ความจำน้อยกว่า
+
+   ฟังก์ชันด้านล่างใช้ cursor สแกนทีละแถวแทน getAll() ที่โหลดทุกแถวพร้อมกัน:
+   - getAllSongsLightFromDB(): ดึงแค่ฟิลด์ที่ใช้แสดงผล (ไม่รวม audioFile)
+     เหมาะกับการ render รายการเพลง ไม่ต้องแบกไฟล์เสียงทุกไฟล์เข้าหน่วยความจำ
+   - getSongFullByKeyFromDB(): หาเพลงเดียวที่ตรง name+artist แล้วหยุดทันที
+     ไม่ต้องโหลดไฟล์เสียงของเพลงอื่นเข้ามาด้วยเลย เหมาะกับตอนกดเล่นเพลง */
+function getAllSongsLightFromDB() {
+  return new Promise((res, rej) => {
+    if (!db) return res([]);
+    const result = [];
+    const tx  = db.transaction(['songs'], 'readonly');
+    const req = tx.objectStore('songs').openCursor();
+    req.onsuccess = e => {
+      const cursor = e.target.result;
+      if (cursor) {
+        const v = cursor.value;
+        result.push({ id: v.id, name: v.name, artist: v.artist, album: v.album, duration: v.duration, coverImage: v.coverImage || null });
+        cursor.continue();
+      } else {
+        res(result);
+      }
+    };
+    req.onerror = () => rej(req.error);
+  });
+}
+
+function getSongFullByKeyFromDB(name, artist) {
+  return new Promise((res, rej) => {
+    if (!db) return res(null);
+    const tx  = db.transaction(['songs'], 'readonly');
+    const req = tx.objectStore('songs').openCursor();
+    req.onsuccess = e => {
+      const cursor = e.target.result;
+      if (!cursor) return res(null);
+      if (cursor.value.name === name && cursor.value.artist === artist) {
+        res(cursor.value);
+      } else {
+        cursor.continue();
+      }
+    };
+    req.onerror = () => rej(req.error);
+  });
+}
+
 function arrayBufferToBase64DataUrl(buf, mime) {
   const bytes = new Uint8Array(buf);
   let bin = '';
@@ -1236,8 +1288,11 @@ async function playThisTrack(el) {
   // ── 2) เคส IndexedDB: ต้อง await ── ตรงนี้คือจุดที่เคยเงียบบนมือถือ
   if (db) {
     try {
-      const songs = await getAllSongsFromDB();
-      const s = songs.find(x => x.name === sn && x.artist === an);
+      // ⚠️ FIX: ใช้ getSongFullByKeyFromDB() แทน getAllSongsFromDB() + find()
+      // เพื่อให้โหลดเข้าหน่วยความจำแค่ "ไฟล์เสียงของเพลงที่จะเล่นเพลงเดียว"
+      // ไม่ใช่ไฟล์เสียงของทุกเพลงในคลังพร้อมกัน — ป้องกันเครื่อง RAM น้อย
+      // หน่วยความจำไม่พอเมื่อคลังเพลงมีหลายไฟล์ขนาดใหญ่รวมกัน
+      const s = await getSongFullByKeyFromDB(sn, an);
       if (s && s.audioFile) {
         const mime = getSafeMimeType(s.audioType, s.audioFileName);
         const blob = new Blob([s.audioFile], { type: mime });
@@ -1347,7 +1402,9 @@ async function renderTrackList() {
   const all = [...(JSON.parse(localStorage.getItem('uploadedSongs')) || [])];
   if (db) {
     try {
-      (await getAllSongsFromDB()).forEach(s => {
+      // ⚠️ FIX: ใช้ getAllSongsLightFromDB() แทน getAllSongsFromDB() เพื่อไม่ต้อง
+      // โหลดไฟล์เสียงเต็มของทุกเพลงเข้าหน่วยความจำ แค่ต้องการแสดงรายชื่อเพลงเท่านั้น
+      (await getAllSongsLightFromDB()).forEach(s => {
         if (!all.some(x => x.name === s.name && x.artist === s.artist))
           all.push({ name: s.name, artist: s.artist, album: s.album, duration: s.duration, coverImage: s.coverImage || null });
       });

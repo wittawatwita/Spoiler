@@ -566,12 +566,52 @@
     });
   }
 
+  /* ⚠️ FIX (ไฟล์เล็กเล่นได้แต่ไฟล์โตขึ้นเล่นไม่ได้เลย — เหมือนปัญหาเดียวกับ
+     index.html): เดิม getSongFromDB() เรียก getAllSongsFromDB() ซึ่งโหลด
+     "ไฟล์เสียงเต็มของทุกเพลงในคลัง" เข้าหน่วยความจำพร้อมกัน แค่เพื่อหา
+     เพลงเดียวที่ต้องการ พอคลังเพลงมีหลายไฟล์ขนาดใหญ่รวมกัน (เช่น 3MB+5MB)
+     ทุกครั้งที่เล่นเพลง/หาเพลง เครื่องต้องแบกรับไฟล์เสียงของทุกเพลงรวมกัน
+     ไว้ในหน่วยความจำชั่วขณะ ซึ่งหนักเกินไปสำหรับเครื่อง RAM น้อย
+
+     แก้โดยใช้ cursor สแกนทีละแถว หยุดทันทีที่เจอเพลงที่ตรงกัน ไม่ต้องโหลด
+     ไฟล์เสียงของเพลงอื่นเข้ามาเลย */
   function getSongFromDB(songName, artistName) {
-    return new Promise(async (resolve) => {
-      try {
-        const songs = await getAllSongsFromDB();
-        resolve(songs.find(s => s.name === songName && s.artist === artistName) || null);
-      } catch { resolve(null); }
+    return new Promise((resolve, reject) => {
+      if (!db) return resolve(null);
+      const tx  = db.transaction(['songs'], 'readonly');
+      const req = tx.objectStore('songs').openCursor();
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (!cursor) return resolve(null);
+        if (cursor.value.name === songName && cursor.value.artist === artistName) {
+          resolve(cursor.value);
+        } else {
+          cursor.continue();
+        }
+      };
+      req.onerror = () => resolve(null);
+    });
+  }
+
+  /* ดึงรายชื่อเพลงแบบเบา (ไม่รวมไฟล์เสียง) ไว้ใช้สร้าง playlist สำหรับแสดงผล
+     เท่านั้น — ไม่ต้องแบกไฟล์เสียงของทุกเพลงเข้าหน่วยความจำเพื่อแค่จะแสดงชื่อ */
+  function getAllSongsLightFromDB() {
+    return new Promise((resolve, reject) => {
+      if (!db) return resolve([]);
+      const result = [];
+      const tx  = db.transaction(['songs'], 'readonly');
+      const req = tx.objectStore('songs').openCursor();
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          const v = cursor.value;
+          result.push({ id: v.id, name: v.name, artist: v.artist, duration: v.duration });
+          cursor.continue();
+        } else {
+          resolve(result);
+        }
+      };
+      req.onerror = () => resolve(result);
     });
   }
 
@@ -1064,8 +1104,9 @@
     saveLikedSongs(likedList);
 
     if (db) {
-      getAllSongsFromDB().then(songs => {
-        const target = songs.find(s => s.name === songTitle && s.artist === songArtist);
+      // ⚠️ FIX: ใช้ getSongFromDB() (cursor หยุดทันทีที่เจอ) แทน getAllSongsFromDB()
+      // เพื่อไม่ต้องโหลดไฟล์เสียงของทุกเพลงเข้าหน่วยความจำแค่จะลบเพลงเดียว
+      getSongFromDB(songTitle, songArtist).then(target => {
         if (target) {
           const tx = db.transaction(['songs'], 'readwrite');
           tx.objectStore('songs').delete(target.id);
@@ -1116,7 +1157,11 @@
     });
 
     try {
-      const idbSongs = await getAllSongsFromDB();
+      // ⚠️ FIX: ใช้ getAllSongsLightFromDB() แทน getAllSongsFromDB() เพื่อไม่ต้อง
+      // โหลดไฟล์เสียงเต็มของทุกเพลงเข้าหน่วยความจำ แค่ต้องการชื่อ/เวลาเพลง
+      // มาสร้างคิวแสดงผลเท่านั้น ไฟล์เสียงจริงจะโหลดทีละเพลงตอนเล่นผ่าน
+      // getSongFromDB() ซึ่งใช้ cursor หยุดทันทีที่เจอเพลงนั้นแล้ว
+      const idbSongs = await getAllSongsLightFromDB();
       idbSongs.forEach(s => {
         const key = `${s.name}|${s.artist || ''}`;
         if (!addedKeys.has(key)) {
