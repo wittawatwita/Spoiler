@@ -17,6 +17,8 @@
     --text-tertiary: #6a6a6a;
     --accent: #1DB954;
     --accent-hover: #1ed760;
+    --danger: #e74c3c;
+    --danger-hover: #c0392b;
     --border: rgba(255,255,255,0.08);
     --border-hover: rgba(255,255,255,0.15);
     --radius-sm: 4px;
@@ -304,7 +306,7 @@
   .tracklist { padding: 20px 28px 28px; }
 
   .track-header {
-    display: grid; grid-template-columns: 40px 1fr 140px 90px 40px;
+    display: grid; grid-template-columns: 40px 1fr 140px 90px 40px 40px;
     gap: 8px; padding: 0 8px 10px;
     border-bottom: 1px solid var(--border); margin-bottom: 4px;
   }
@@ -313,7 +315,7 @@
 
   /* ─── Track Item ─── */
   .track-item {
-    display: grid; grid-template-columns: 40px 1fr 140px 90px 40px;
+    display: grid; grid-template-columns: 40px 1fr 140px 90px 40px 40px;
     gap: 8px; padding: 8px; align-items: center;
     border-radius: var(--radius-md);
     cursor: pointer;
@@ -365,6 +367,11 @@
   .track-like i.ti-heart-filled { color: var(--accent) !important; }
   .track-like:active i { transform: scale(0.85); }
 
+  .track-delete { display: flex; justify-content: center; align-items: center; }
+  .track-delete i { font-size: 16px; color: var(--text-tertiary); transition: color 0.15s, transform 0.1s; }
+  .track-item:hover .track-delete i { color: var(--danger); }
+  .track-delete:active i { transform: scale(0.85); }
+
   /* ─── Ghost card ─── */
   #drag-ghost {
     position: fixed;
@@ -403,6 +410,38 @@
     outline: 1.5px solid rgba(29,185,84,0.5);
     outline-offset: -1px;
   }
+
+  /* ─── Delete confirm modal ─── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; z-index: 9990;
+    background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: #1e1e1e; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 24px; padding: 28px 32px; width: 340px; max-width: 90vw;
+    text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  }
+  .modal-icon-wrap {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: rgba(231,76,60,0.12); border: 1px solid rgba(231,76,60,0.3);
+    display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;
+  }
+  .modal-icon-wrap i { font-size: 24px; color: var(--danger); }
+  .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+  .modal-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 24px; }
+  .modal-song-name { color: #fff; font-weight: 600; }
+  .modal-actions { display: flex; gap: 10px; }
+  .modal-btn {
+    flex: 1; padding: 10px; border-radius: var(--radius-md); font-size: 14px;
+    font-weight: 600; cursor: pointer; font-family: var(--font); border: none; transition: opacity 0.2s, transform 0.1s;
+  }
+  .modal-btn:active { transform: scale(0.97); }
+  .modal-btn-cancel { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.1); }
+  .modal-btn-cancel:hover { background: #333; color: #fff; }
+  .modal-btn-confirm { background: var(--danger); color: #fff; }
+  .modal-btn-confirm:hover { background: var(--danger-hover); }
 
   /* ─── Player Bar ─── */
   .player-bar {
@@ -482,9 +521,9 @@
     .playlist-section { padding: 16px 16px 4px; }
     .pl-card { flex: 0 0 120px; width: 120px; }
     .tracklist { padding: 16px 16px 24px; }
-    .track-header { grid-template-columns: 32px 1fr 70px 36px; }
+    .track-header { grid-template-columns: 32px 1fr 70px 36px 36px; }
     .track-header .th-album { display: none; }
-    .track-item  { grid-template-columns: 32px 1fr 70px 36px; }
+    .track-item  { grid-template-columns: 32px 1fr 70px 36px 36px; }
     .track-album { display: none; }
     #drag-ghost  { width: 280px; }
 
@@ -538,6 +577,23 @@
     <div class="ghost-artist" id="ghostArtist">-</div>
   </div>
   <div class="ghost-grip"><i class="ti ti-grip-vertical"></i></div>
+</div>
+
+<div class="modal-overlay" id="deleteTrackModal">
+  <div class="modal-box">
+    <div class="modal-icon-wrap"><i class="ti ti-trash"></i></div>
+    <div class="modal-title">ลบเพลงนี้แบบถาวร?</div>
+    <div class="modal-desc">
+      คุณต้องการลบ <span class="modal-song-name" id="deleteTrackModalName"></span> ออกจากคลังเพลงใช่ไหม?<br>
+      ระบบจะลบข้อมูลทุกส่วนที่เกี่ยวกับเพลงนี้ทิ้งทันที (รวมถึงข้อมูลที่อาจค้าง/เสียหายอยู่) การกระทำนี้ไม่สามารถยกเลิกได้
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn modal-btn-cancel" onclick="closeDeleteTrackModal()">ยกเลิก</button>
+      <button class="modal-btn modal-btn-confirm" onclick="confirmDeleteTrack()">
+        <i class="ti ti-trash" style="font-size:15px;vertical-align:-2px;margin-right:4px;"></i>ลบถาวร
+      </button>
+    </div>
+  </div>
 </div>
 
 <div class="app">
@@ -621,6 +677,7 @@
         <span>ชื่อเพลง</span>
         <span class="th-album">อัลบั้ม</span>
         <span class="th-dur">เวลา</span>
+        <span></span>
         <span></span>
       </div>
     </section>
@@ -1231,6 +1288,159 @@ function applyOrder(all) {
 }
 
 /* ══════════════════════════════════════════════════════════
+   ลบเพลงแบบถาวร (จากหน้า index โดยตรง)
+   ────────────────────────────────────────────────────────
+   ⚠️ ออกแบบมาเพื่อแก้ปัญหา "เพลงค้าง ลบจากหน้า song.html ไม่ได้":
+   เดิม การลบใน song.html จะ "หา" เพลงด้วย getSongFromDB(name, artist)
+   แบบ cursor ก่อน แล้วเอา .id ที่เจอไปลบอีกที (2 ขั้นตอน) ถ้าเพลงตัวนั้น
+   มีข้อมูลเพี้ยน เช่น name/artist มีช่องว่างเกิน, เคสตัวอักษรไม่ตรง,
+   หรือมีแถวซ้ำที่ข้อมูลเสียหายบางส่วน ขั้นตอน "หา" อาจไม่เจอเลย
+   ทำให้ไม่มีอะไรถูกลบ แต่ก็ไม่มี error ให้เห็น ดูเหมือนกดลบไม่ขึ้น
+
+   ฟังก์ชันนี้แก้โดย:
+   1. ลบโดยตรงจาก cursor.delete() ขณะสแกน (ไม่ต้อง get-then-delete
+      ที่อาจหลุดจังหวะกัน)
+   2. เทียบชื่อ/ศิลปินแบบ trim() ตัดช่องว่างหน้า-หลังออกก่อนเทียบ
+      กันเคสมีอักขระว่างแฝงมา
+   3. ลบ "ทุกแถว" ที่ตรงกัน ไม่ใช่แค่แถวแรกที่เจอ — เผื่อมีข้อมูลซ้ำ/
+      ค้างจากการเขียนไม่สมบูรณ์ก่อนหน้านี้
+   4. แต่ละขั้นการล้างข้อมูล (localStorage, cover, order, playlists,
+      liked, indexedDB) แยก try/catch ของตัวเอง ถ้าขั้นใดพังก็ไม่ทำให้
+      ขั้นอื่นหยุดทำงานไปด้วย เพื่อให้ลบได้ "ถาวร" มากที่สุดเท่าที่ทำได้
+══════════════════════════════════════════════════════════ */
+async function permanentlyDeleteSong(song) {
+  const targetName   = (song.name   || '').trim();
+  const targetArtist = (song.artist || '').trim();
+
+  // 1) ลบจาก uploadedSongs (localStorage)
+  try {
+    const lsSongs = JSON.parse(localStorage.getItem('uploadedSongs')) || [];
+    const filtered = lsSongs.filter(s =>
+      !((s.name || '').trim() === targetName && (s.artist || '').trim() === targetArtist));
+    localStorage.setItem('uploadedSongs', JSON.stringify(filtered));
+  } catch (e) { console.error('ลบจาก uploadedSongs ไม่สำเร็จ:', e); }
+
+  // 2) ลบรูปปก
+  try {
+    localStorage.removeItem(`cover_${song.name}_${song.artist}`);
+    localStorage.removeItem(`cover_${targetName}_${targetArtist}`);
+  } catch (e) { console.error('ลบรูปปกไม่สำเร็จ:', e); }
+
+  // 3) ลบออกจาก order ที่บันทึกไว้
+  try {
+    const order = loadSavedOrder().filter(o =>
+      !((o.name || '').trim() === targetName && (o.artist || '').trim() === targetArtist));
+    localStorage.setItem(ORDER_KEY, JSON.stringify(order));
+  } catch (e) { console.error('ลบจาก order ไม่สำเร็จ:', e); }
+
+  // 4) ลบออกจากทุกเพลย์ลิสต์
+  try {
+    const playlists = getUserPlaylists();
+    playlists.forEach(pl => {
+      pl.songs = (pl.songs || []).filter(s =>
+        !((s.name || '').trim() === targetName && (s.artist || '').trim() === targetArtist));
+    });
+    localStorage.setItem('sf_playlists', JSON.stringify(playlists));
+  } catch (e) { console.error('ลบจากเพลย์ลิสต์ไม่สำเร็จ:', e); }
+
+  // 5) ลบออกจากเพลงที่ชอบ
+  try {
+    const liked = loadLikedSongs().filter(s =>
+      !((s.name || '').trim() === targetName && (s.artist || '').trim() === targetArtist));
+    saveLikedSongs(liked);
+  } catch (e) { console.error('ลบจากเพลงที่ชอบไม่สำเร็จ:', e); }
+
+  // 6) ลบจาก IndexedDB — สแกนด้วย cursor แล้ว delete() ทันทีที่เจอ ลบทุกแถวที่ตรง
+  if (db) {
+    try {
+      await new Promise((resolve, reject) => {
+        const tx    = db.transaction(['songs'], 'readwrite');
+        const store = tx.objectStore('songs');
+        const req   = store.openCursor();
+        let deletedCount = 0;
+
+        req.onsuccess = (e) => {
+          const cursor = e.target.result;
+          if (cursor) {
+            const v = cursor.value || {};
+            const nameMatch   = (v.name   || '').trim() === targetName;
+            const artistMatch = (v.artist || '').trim() === targetArtist;
+            if (nameMatch && artistMatch) {
+              cursor.delete();
+              deletedCount++;
+            }
+            cursor.continue();
+          }
+          // ถ้าไม่มี cursor ต่อแล้ว ให้รอ tx.oncomplete เป็นคนสรุปผล
+        };
+        req.onerror = () => reject(req.error);
+
+        tx.oncomplete = () => resolve(deletedCount);
+        tx.onerror    = () => reject(tx.error);
+        tx.onabort    = () => reject(tx.error || new Error('Transaction aborted'));
+      });
+    } catch (e) {
+      console.error('ลบจาก IndexedDB ไม่สำเร็จ:', e);
+      // ไม่ throw ต่อ — ข้อมูลใน localStorage ถูกล้างไปแล้วในขั้นตอนก่อนหน้า
+      // อย่างน้อยเพลงจะหายไปจากหน้าจอ/คิวเล่น แม้ตัวไฟล์ใน IndexedDB จะลบไม่สำเร็จ
+      return false;
+    }
+  }
+  return true;
+}
+
+let pendingDeleteSong = null;
+
+function openDeleteTrackModal(idx) {
+  const song = currentSongList[idx];
+  if (!song) return;
+  pendingDeleteSong = song;
+  document.getElementById('deleteTrackModalName').textContent = song.name;
+  document.getElementById('deleteTrackModal').classList.add('show');
+}
+
+function closeDeleteTrackModal() {
+  document.getElementById('deleteTrackModal').classList.remove('show');
+  pendingDeleteSong = null;
+}
+
+document.getElementById('deleteTrackModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('deleteTrackModal')) closeDeleteTrackModal();
+});
+
+async function confirmDeleteTrack() {
+  if (!pendingDeleteSong) { closeDeleteTrackModal(); return; }
+  const song = pendingDeleteSong;
+  const wasPlaying = currentPlayIndex >= 0 &&
+    currentSongList[currentPlayIndex] &&
+    currentSongList[currentPlayIndex].name === song.name &&
+    (currentSongList[currentPlayIndex].artist || '') === (song.artist || '');
+
+  await permanentlyDeleteSong(song);
+
+  if (wasPlaying) {
+    audioElement.pause();
+    if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
+    audioElement.removeAttribute('src');
+    setPlayState(false);
+    currentPlayIndex = -1;
+    localStorage.removeItem('currentSongName');
+    localStorage.removeItem('currentArtistName');
+    document.getElementById('miniPlayer').classList.remove('active');
+    document.querySelector('.player-bar .now-play-meta .name').innerText   = '-';
+    document.querySelector('.player-bar .now-play-meta .artist').innerText = 'ไม่มีเพลงที่กำลังเล่น';
+    document.getElementById('mpName').innerText   = '-';
+    document.getElementById('mpArtist').innerText = 'ไม่มีเพลงที่กำลังเล่น';
+    updatePlayerCover(null);
+    updateHeroSection(null);
+  }
+
+  closeDeleteTrackModal();
+  showToast(`ลบ "${song.name}" ออกจากคลังแบบถาวรแล้ว`);
+  await renderTrackList();
+}
+
+/* ══════════════════════════════════════════════════════════
    playThisTrack
    ⚠️ FIX (มือถือเล่นเพลงไม่ได้ — กดแล้วเงียบสนิท):
    สาเหตุคือฟังก์ชันนี้เป็น async และมีการ await ก่อนเรียก
@@ -1410,7 +1620,11 @@ async function renderTrackList() {
       });
     } catch {}
   }
-  if (!all.length) return;
+  if (!all.length) {
+    currentSongList = [];
+    document.querySelectorAll('.track-item').forEach(el => el.remove());
+    return;
+  }
   currentSongList = applyOrder(all);
   renderRows();
 }
@@ -1443,6 +1657,9 @@ function renderRows() {
       <div class="track-dur">${song.duration || '0:00'}</div>
       <div class="track-like" onclick="toggleTrackLike(this, event)" title="ชอบเพลงนี้">
         <i class="ti ${likedNow ? 'ti-heart-filled' : 'ti-heart'}"></i>
+      </div>
+      <div class="track-delete" onclick="openDeleteTrackModal(${idx}); event.stopPropagation();" title="ลบเพลงนี้แบบถาวร">
+        <i class="ti ti-trash"></i>
       </div>
     `;
     container.appendChild(row);
