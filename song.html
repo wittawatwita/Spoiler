@@ -485,6 +485,7 @@
      Song Order — อ่าน key เดียวกับหน้าสวยดี.html
   ══════════════════════════════════════════════════════════ */
   const ORDER_KEY = 'soundflow_song_order';
+  const PLAY_SOURCE_KEY = 'soundflow_play_source';
 
   function loadSavedOrder() {
     try { return JSON.parse(localStorage.getItem(ORDER_KEY)) || []; }
@@ -492,10 +493,15 @@
   }
 
   /**
-   * เรียง all[] ตาม saved order
-   * ถ้าไม่มี order บันทึกไว้ คืนค่าตามเดิม
+   * เรียงแบบเดียวกับที่หน้า index.html ใช้ render รายการเพลง:
+   * เพลงที่อยู่ใน saved order มาก่อนตามลำดับนั้น ส่วนเพลงที่เหลือ (ไม่อยู่
+   * ใน order เช่นเพลงที่อัปโหลดใหม่) ต่อท้ายตามลำดับเดิมที่รวมมา
+   *
+   * ใช้สำหรับกรณีมาจากหน้า index.html เพื่อให้คิวเพลงใน
+   * song.html เรียงตรงกับที่หน้า index.html แสดงเป๊ะ ๆ ไม่ใช่แค่
+   * "ลำดับการรวม localStorage+IndexedDB" เฉย ๆ
    */
-  function applyOrder(all) {
+  function applyIndexStyleOrder(all) {
     const saved = loadSavedOrder();
     if (!saved.length) return all;
     const out = [];
@@ -503,10 +509,67 @@
       const f = all.find(s => s.title === name && (s.artist || '') === (artist || ''));
       if (f) out.push(f);
     });
-    // เพลงที่ไม่มีใน order (เพิ่งเพิ่มใหม่) ต่อท้าย
     all.forEach(s => {
-      if (!out.some(o => o.title === s.title && o.artist === s.artist)) out.push(s);
+      if (!out.some(o => o.title === s.title && (o.artist || '') === (s.artist || ''))) out.push(s);
     });
+    return out;
+  }
+
+  /**
+   * เรียง all[] ตาม saved order
+   *
+   * ⚠️ FIX #1 (บั๊กเดิม — เพลย์ลิสต์เล็กกลายเป็นเล่นทั้งคลัง):
+   * แต่ก่อนฟังก์ชันนี้ทำสองอย่างปนกัน คือ (1) เรียงตาม order ที่บันทึกไว้
+   * และ (2) ต่อท้ายด้วย "เพลงทั้งหมดในคลัง" ที่ไม่อยู่ใน order นั้น
+   * ผลคือเพลย์ลิสต์เล็ก (เช่น 3 เพลง) จะมีเพลงอื่นทั้งคลังโผล่ต่อท้ายมาด้วย
+   * จึงแก้เป็น "เชื่อ order ที่ส่งมา 100%" คืนเฉพาะเพลงที่อยู่ใน order นั้น
+   *
+   * ⚠️ FIX #3 (บั๊กรอบนี้ — กดเพลงจากหน้า index.html (หน้ารวมเพลงทั้งหมด)
+   * แล้วไป song.html กลับรันแค่เพลงในเพลย์ลิสต์ที่เคยเข้าไปก่อนหน้านี้
+   * แทนที่จะรวมเพลงทั้งหมด):
+   * เดิมเคยพยายามใช้วิธี "เช็คว่าเพลงที่กำลังจะเล่นอยู่ใน saved order
+   * หรือไม่" เพื่อแยกแยะว่ามาจาก index.html หรือเพลย์ลิสต์ — แต่วิธีนี้
+   * ผิดตั้งแต่ต้น เพราะถ้าเพลงนั้นบังเอิญอยู่ในเพลย์ลิสต์ที่เคยกดเข้าไป
+   * ก่อนหน้านี้ด้วย (order เป็นค่าค้างจากเพลย์ลิสต์ล่าสุดที่เข้า) ระบบจะ
+   * เข้าใจผิดว่ามาจากเพลย์ลิสต์ ทั้งที่จริง ๆ กดมาจาก index.html — ไม่มี
+   * ทางแยกแยะแน่ชัด 100% จากการเช็คแค่ "เพลงอยู่ใน order หรือไม่"
+   *
+   * วิธีที่ถูกต้องคือต้องมี "flag/marker" บอกแหล่งที่มาแบบชัดเจนจาก
+   * ต้นทาง — index.html จะตั้งค่า soundflow_play_source = 'all' ใน
+   * localStorage ก่อนเปลี่ยนหน้าทุกครั้งที่กดเล่นเพลงจากหน้านั้น
+   * ส่วนหน้าเพลย์ลิสต์ (เช่น เพลงที่ชอบ.html) จะไม่ตั้ง flag นี้ (หรือเป็น
+   * ค่าอื่น) เพราะมันมี saveOrderForQueue ของตัวเองอยู่แล้วซึ่งเชื่อถือได้
+   *
+   * ดังนั้น applyOrder() จึงเช็ค flag นี้เป็นอันดับแรกก่อนเสมอ:
+   *   - flag === 'all'  → มาจากหน้า index.html แน่นอน 100% (ไม่ต้องเดา)
+   *     → ใช้ applyIndexStyleOrder() รวมเพลงทั้งหมดของหน้า index.html
+   *   - flag ไม่ใช่ 'all' (หรือไม่มีเลย) → มาจากเพลย์ลิสต์ → ใช้ order
+   *     ตามเพลย์ลิสต์ปกติเหมือนเดิม (FIX #1)
+   * flag จะถูกลบทิ้งหลังใช้งานเสร็จ (อ่านครั้งเดียว) เพื่อไม่ให้ค้างไป
+   * กระทบการเข้าเพลย์ลิสต์ครั้งถัดไป
+   */
+  function applyOrder(all, currentName, currentArtist) {
+    const playSource = localStorage.getItem(PLAY_SOURCE_KEY);
+
+    if (playSource === 'all') {
+      // มาจากหน้า index.html แน่นอน — ไม่ต้องเดาจาก order เลย
+      return applyIndexStyleOrder(all);
+    }
+
+    const saved = loadSavedOrder();
+    if (!saved.length) return all;
+
+    const out = [];
+    saved.forEach(({ name, artist }) => {
+      const f = all.find(s => s.title === name && (s.artist || '') === (artist || ''));
+      if (f) out.push(f);
+    });
+    // กันเคสเพลงที่กำลังเล่นอยู่ใน order แต่ all[] บางเพลงหาย (ไม่ควรเกิด
+    // แต่เผื่อไว้) — ถ้าหาเพลงปัจจุบันไม่เจอใน out เลย ให้ fallback เป็น
+    // การเรียงแบบหน้า index.html เพื่อไม่ให้คิวว่างเปล่าไปเลย
+    if (currentName && !out.some(s => s.title === currentName && (s.artist || '') === (currentArtist || ''))) {
+      return applyIndexStyleOrder(all);
+    }
     return out;
   }
 
@@ -1197,8 +1260,15 @@
       return;
     }
 
-    /* ── เรียงตาม order ที่บันทึกไว้ (เหมือนหน้าสวยดี) ── */
-    playlist = applyOrder(allSongs);
+    /* ── เรียงตาม flag/order ที่บันทึกไว้ (ดูรายละเอียดที่ฟังก์ชัน
+       applyOrder() ด้านบน — เช็ค soundflow_play_source ก่อนเป็นอันดับแรก
+       ถ้าเป็น 'all' แปลว่ามาจากหน้า index.html → รวมเพลงทั้งหมด
+       ถ้าไม่ใช่ แปลว่ามาจากเพลย์ลิสต์ → ใช้ order ตามเพลย์ลิสต์นั้นเป๊ะ ๆ) ── */
+    playlist = applyOrder(allSongs, songName, artistName);
+
+    // อ่าน flag ใช้งานครั้งเดียวแล้วลบทิ้งทันที ป้องกันไม่ให้ค้างไปกระทบ
+    // การเข้าเพลย์ลิสต์อื่นในครั้งถัดไป (ตามที่ตกลงไว้ — "ใช้แล้วลบ")
+    localStorage.removeItem(PLAY_SOURCE_KEY);
 
     /* ── หาตำแหน่งเพลงปัจจุบัน ── */
     if (songName) {

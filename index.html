@@ -1455,6 +1455,15 @@ async function confirmDeleteTrack() {
    ตัวเดิมจะเล่นต่ออัตโนมัติเมื่อ src เปลี่ยนและมีการเรียก play() ซ้ำ
    อีกครั้งหลังตั้ง src ซึ่งยังถือว่าเป็น user-initiated เพราะเกิดขึ้น
    ใน call stack เดียวกันที่เริ่มจาก click)
+
+   ⚠️ FIX เพิ่มเติม (บั๊ก: กดเพลงจากหน้า index.html แล้วไป song.html
+   กลับรันแค่เพลงในเพลย์ลิสต์ที่เคยเข้าก่อนหน้านี้ แทนที่จะรวมเพลง
+   ทั้งหมดของหน้า index.html):
+   เพิ่มการตั้ง flag 'soundflow_play_source' = 'all' ใน localStorage
+   ก่อนเปลี่ยนหน้าไป song.html ทุกครั้งที่กดเล่นเพลงจากหน้านี้ (หน้ารวม
+   เพลงทั้งหมด) เพื่อบอกแหล่งที่มาให้ song.html รู้แบบชัดเจน 100% — ไม่
+   ต้องเดาจาก "เพลงอยู่ใน saved order หรือไม่" ซึ่งแยกแยะไม่ได้แน่นอน
+   ในเคสที่เพลงนั้นบังเอิญอยู่ในเพลย์ลิสต์ที่เคยเข้าไปก่อนหน้านี้ด้วย
 ══════════════════════════════════════════════════════════ */
 async function playThisTrack(el) {
   const nameEl   = el.querySelector('.name');
@@ -1469,6 +1478,10 @@ async function playThisTrack(el) {
   localStorage.setItem('currentArtistName', an);
   localStorage.removeItem('currentPlayTime');
   sessionStorage.removeItem('currentAudioSrc');
+  // บอกแหล่งที่มาให้ song.html รู้ชัดเจนว่ากดมาจากหน้ารวมเพลงทั้งหมด
+  // (index.html) — ใช้แยกแยะจากกรณีกดมาจากหน้าเพลย์ลิสต์ ดูรายละเอียด
+  // เพิ่มเติมที่ฟังก์ชัน applyOrder() ในไฟล์ song.html
+  localStorage.setItem('soundflow_play_source', 'all');
 
   document.querySelector('.player-bar .now-play-meta .name').innerText   = sn;
   document.querySelector('.player-bar .now-play-meta .artist').innerText = an;
