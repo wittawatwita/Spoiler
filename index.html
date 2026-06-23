@@ -464,6 +464,11 @@
   .player-heart { cursor: pointer; }
   .player-heart i { font-size: 18px; color: var(--text-secondary); margin-left: 4px; transition: color 0.15s; }
   .player-heart i.ti-heart-filled { color: var(--accent); }
+  .player-close { cursor: pointer; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; margin-left: 2px; transition: background 0.15s; flex-shrink: 0; }
+  .player-close i { font-size: 16px; color: var(--text-secondary); transition: color 0.15s; }
+  .player-close:hover { background: var(--bg-tertiary); }
+  .player-close:hover i { color: var(--text-primary); }
+  .player-bar.no-track .player-close { display: none; }
   .player-center { display: flex; flex-direction: column; align-items: center; gap: 10px; }
   .player-controls { display: flex; align-items: center; gap: 20px; }
   .ctrl-btn { display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -549,6 +554,7 @@
     .mp-controls { display: flex; align-items: center; gap: 14px; }
     .mp-controls i { font-size: 20px; color: var(--text-secondary); cursor: pointer; }
     .mp-controls .play-main { font-size: 26px; color: var(--text-primary); }
+    .mp-controls .mp-close { font-size: 19px; }
     .mp-progress { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--bg-tertiary); }
     .mp-progress-fill { width: 0%; height: 100%; background: var(--accent); }
 
@@ -683,7 +689,7 @@
     </section>
   </main>
 
-  <footer class="player-bar">
+  <footer class="player-bar no-track" id="playerBar">
     <div class="player-left">
       <div class="now-play-img" id="nowPlayImg"><i class="ti ti-wave-sine"></i></div>
       <div class="now-play-meta">
@@ -691,6 +697,9 @@
         <div class="artist">ไม่มีเพลงที่กำลังเล่น</div>
       </div>
       <div class="player-heart" id="playerHeart" onclick="togglePlayerHeart()"><i class="ti ti-heart"></i></div>
+      <div class="player-close" id="playerClose" onclick="stopAndClearNowPlaying()" title="ปิดเพลงนี้">
+        <i class="ti ti-x"></i>
+      </div>
     </div>
     <div class="player-center">
       <div class="player-controls">
@@ -727,6 +736,8 @@
     </div>
   </a>
   <div class="mp-controls">
+    <i class="ti ti-x mp-close" id="mpCloseBtn" title="ปิดเพลงนี้"
+       onclick="event.preventDefault(); event.stopPropagation(); stopAndClearNowPlaying();"></i>
     <i class="ti ti-player-play play-main" id="mpPlayBtn"></i>
   </div>
 </div>
@@ -804,6 +815,37 @@ audioElement.addEventListener('error', () => {
   showToast('เล่นเพลงนี้ไม่ได้ ไฟล์อาจเสียหายหรือไม่รองรับ');
 });
 
+/* ══════════════════════════════════════════════════════════
+   ⭐ NEW: บันทึกตำแหน่งเวลาเล่นแบบต่อเนื่อง + flag กำลังเล่นอยู่หรือไม่
+   ────────────────────────────────────────────────────────
+   เดิม 'currentPlayTime' จะถูกบันทึกแค่ตอนกด "เปิดเพลงแบบเต็มจอ" (คลิก
+   openFullPlayer) เท่านั้น ถ้าผู้ใช้กดลิงก์อื่นที่ไม่ใช่ปุ่มนั้น (เช่น
+   เมนู sidebar, แถบเมนูล่างมือถือ) หรือปิด/รีเฟรชแท็บกะทันหัน ตำแหน่ง
+   เวลาเพลงจะไม่ถูกบันทึกเลย พอเปิดมาใหม่เพลงจะเริ่มเล่นจาก 0:00 ใหม่
+   ทั้งที่ฟังไปแล้วครึ่งเพลง
+
+   จุดนี้แก้โดยบันทึกตำแหน่งเวลาเล่น "ทุกครั้ง" ที่ timeupdate ยิง (แต่
+   หน่วงความถี่ไว้ไม่ให้เขียน localStorage ถี่เกินไป) และเพิ่ม flag
+   'sf_was_playing' บอกว่าตอนออกจากหน้านี้เพลงกำลังเล่นอยู่หรือ pause ไว้
+   เพื่อให้หน้าที่เปิดขึ้นมาใหม่ (รวมถึง index.html เองตอนกลับมา) รู้ว่า
+   ควร auto-resume เล่นต่อทันทีหรือไม่ — ถ้าผู้ใช้ pause ไว้ก่อนเปลี่ยน
+   หน้า กลับมาก็ไม่ควรเล่นเองโดยที่ผู้ใช้ไม่ได้ขอ
+══════════════════════════════════════════════════════════ */
+let lastTimeSaveAt = 0;
+function persistPlaybackPosition(force) {
+  const now = Date.now();
+  if (!force && now - lastTimeSaveAt < 1000) return; // หน่วงไว้ ~1 วินาที ไม่เขียนถี่เกินไป
+  lastTimeSaveAt = now;
+  try {
+    if (audioElement.currentTime > 0) {
+      localStorage.setItem('currentPlayTime', String(audioElement.currentTime));
+    }
+  } catch (e) { /* เก็บไม่สำเร็จก็ไม่เป็นไร แค่ resume ไม่ได้แม่นยำ */ }
+}
+function persistWasPlaying(state) {
+  try { localStorage.setItem('sf_was_playing', state ? '1' : '0'); } catch (e) {}
+}
+
 function setPlayState(p) {
   playing = p;
   const di = document.querySelector('#desktopPlayBtn i');
@@ -819,11 +861,13 @@ function setPlayState(p) {
         if (di) di.className = 'ti ti-player-play';
         if (mi) mi.className = 'ti ti-player-play play-main';
         showToast('กดเล่นอีกครั้งเพื่อเริ่มเพลง');
+        persistWasPlaying(false);
       });
     }
   } else {
     audioElement.pause();
   }
+  persistWasPlaying(playing);
   updateHeroPlayButton();
 }
 
@@ -840,8 +884,12 @@ function setPlayState(p) {
    จะรอ event 'canplay' (เบราว์เซอร์ยืนยันว่าพร้อมเล่นจริง) ก่อนค่อย
    เรียก play() และตั้ง timeout 8 วินาทีกันไว้เผื่อเครื่องช้ามาก ๆ จน
    ไม่ยิง canplay เลย จะได้แจ้งเตือนผู้ใช้แทนที่จะค้างเงียบตลอดไป
+
+   ⭐ NEW: เพิ่มพารามิเตอร์ resumeAt (วินาที) — ถ้ามีค่า จะ seek ไปยัง
+   ตำแหน่งนั้นก่อนเริ่มเล่น เพื่อรองรับการ "เล่นต่อจากตำแหน่งเดิม" ตอน
+   กลับมาหน้านี้หลังเปลี่ยนหน้าไปแล้ว (auto-resume)
 ══════════════════════════════════════════════════════════ */
-function startPlayback() {
+function startPlayback(resumeAt) {
   // อัปเดต UI เป็นสถานะ "กำลังเล่น" ทันทีเพื่อความรู้สึกตอบสนองไว
   playing = true;
   const di = document.querySelector('#desktopPlayBtn i');
@@ -849,15 +897,23 @@ function startPlayback() {
   if (di) di.className = 'ti ti-player-pause';
   if (mi) mi.className = 'ti ti-player-pause play-main';
   updateHeroPlayButton();
+  persistWasPlaying(true);
 
   let started = false;
   let timeoutId = null;
+
+  function applyResumePoint() {
+    if (typeof resumeAt === 'number' && resumeAt > 0 && isFinite(resumeAt)) {
+      try { audioElement.currentTime = resumeAt; } catch (e) { /* เผื่อ duration ยังไม่พร้อม */ }
+    }
+  }
 
   function tryPlay() {
     if (started) return;
     started = true;
     clearTimeout(timeoutId);
     audioElement.removeEventListener('canplay', tryPlay);
+    applyResumePoint();
     const p = audioElement.play();
     if (p && typeof p.catch === 'function') {
       p.catch(err => {
@@ -867,6 +923,7 @@ function startPlayback() {
         if (mi) mi.className = 'ti ti-player-play play-main';
         updateHeroPlayButton();
         showToast('กดเล่นอีกครั้งเพื่อเริ่มเพลง');
+        persistWasPlaying(false);
       });
     }
   }
@@ -887,6 +944,7 @@ function startPlayback() {
       if (mi) mi.className = 'ti ti-player-play play-main';
       updateHeroPlayButton();
       showToast('โหลดเพลงช้ากว่าปกติ ลองกดเล่นอีกครั้ง');
+      persistWasPlaying(false);
     }, 8000);
   }
 }
@@ -914,6 +972,71 @@ async function playByIndex(idx) {
   const rows = document.querySelectorAll('.track-item');
   const el   = rows[idx];
   if (el) { await playThisTrack(el); currentPlayIndex = idx; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   ⭐ NEW: ปิดเพลงปัจจุบัน — กดกากบาดที่แถบเพลย์เยอร์
+   ────────────────────────────────────────────────────────
+   หยุดเล่นเพลงทันที, เคลียร์ข้อมูลเพลงที่กำลังเล่นทั้งหมด (ทั้งใน
+   audio element, localStorage, sessionStorage) แล้วรีเซ็ต UI ของ
+   แถบเพลย์เยอร์ (เดสก์ท็อป), มินิเพลย์เยอร์ (มือถือ), Hero Section,
+   และเอาไฮไลต์ "กำลังเล่น" ออกจากแถวเพลงในลิสต์ — ใช้ฟังก์ชันเดียวกัน
+   กับตอนลบเพลงที่กำลังเล่นอยู่ (confirmDeleteTrack) เพื่อไม่ให้โค้ด
+   ซ้ำกัน
+══════════════════════════════════════════════════════════ */
+function stopAndClearNowPlaying() {
+  audioElement.pause();
+  if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
+  audioElement.removeAttribute('src');
+  try { audioElement.load(); } catch (e) {}
+  setPlayState(false);
+  currentPlayIndex = -1;
+
+  try {
+    localStorage.removeItem('currentSongName');
+    localStorage.removeItem('currentArtistName');
+    localStorage.removeItem('currentPlayTime');
+    localStorage.removeItem('sf_was_playing');
+  } catch (e) {}
+  try {
+    sessionStorage.removeItem('currentAudioSrc');
+    sessionStorage.removeItem('currentAudioType');
+  } catch (e) {}
+
+  const miniPlayerEl = document.getElementById('miniPlayer');
+  if (miniPlayerEl) miniPlayerEl.classList.remove('active');
+
+  const pbNameEl   = document.querySelector('.player-bar .now-play-meta .name');
+  const pbArtistEl = document.querySelector('.player-bar .now-play-meta .artist');
+  if (pbNameEl)   pbNameEl.innerText   = '-';
+  if (pbArtistEl) pbArtistEl.innerText = 'ไม่มีเพลงที่กำลังเล่น';
+
+  const mpNameEl   = document.getElementById('mpName');
+  const mpArtistEl = document.getElementById('mpArtist');
+  if (mpNameEl)   mpNameEl.innerText   = '-';
+  if (mpArtistEl) mpArtistEl.innerText = 'ไม่มีเพลงที่กำลังเล่น';
+
+  updatePlayerCover(null);
+  updatePlayerHeartIcon();
+  updateHeroSection(null);
+
+  // เอาไฮไลต์ "กำลังเล่น" ออกจากทุกแถวเพลง คืนเลขลำดับเดิม
+  document.querySelectorAll('.track-item').forEach((item, i) => {
+    item.classList.remove('playing');
+    const nd = item.querySelector('.track-num');
+    if (nd) nd.innerHTML = i + 1;
+  });
+
+  // รีเซ็ตแถบความก้าวหน้าและเวลา
+  if (pbFill) pbFill.style.width = '0%';
+  if (mpFill) mpFill.style.width = '0%';
+  const ts = document.querySelectorAll('.progress-row .prog-time');
+  if (ts[0]) ts[0].textContent = '0:00';
+  if (ts[1]) ts[1].textContent = '0:00';
+
+  // ทำให้แถบเพลย์เยอร์กลับสู่สถานะ "ไม่มีเพลง" (ซ่อนปุ่มกากบาด)
+  const playerBarEl = document.getElementById('playerBar');
+  if (playerBarEl) playerBarEl.classList.add('no-track');
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1152,7 +1275,13 @@ dbReq.onupgradeneeded = e => {
   if (!db.objectStoreNames.contains('songs'))
     db.createObjectStore('songs', { keyPath: 'id', autoIncrement: true });
 };
-dbReq.onsuccess = e => { db = e.target.result; };
+dbReq.onsuccess = e => {
+  db = e.target.result;
+  // ⭐ NEW: เมื่อ DB พร้อมแล้ว ให้ลองรีโหลดสถานะเพื่อ auto-resume
+  // (เผื่อ DOMContentLoaded วิ่งไปก่อนที่ db เปิดเสร็จ ฟังก์ชัน
+  // tryAutoResumePlayback() เดิมจะหาเพลงใน DB ไม่เจอ)
+  tryAutoResumePlayback();
+};
 
 function getAllSongsFromDB() {
   return new Promise((res, rej) => {
@@ -1419,20 +1548,7 @@ async function confirmDeleteTrack() {
   await permanentlyDeleteSong(song);
 
   if (wasPlaying) {
-    audioElement.pause();
-    if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
-    audioElement.removeAttribute('src');
-    setPlayState(false);
-    currentPlayIndex = -1;
-    localStorage.removeItem('currentSongName');
-    localStorage.removeItem('currentArtistName');
-    document.getElementById('miniPlayer').classList.remove('active');
-    document.querySelector('.player-bar .now-play-meta .name').innerText   = '-';
-    document.querySelector('.player-bar .now-play-meta .artist').innerText = 'ไม่มีเพลงที่กำลังเล่น';
-    document.getElementById('mpName').innerText   = '-';
-    document.getElementById('mpArtist').innerText = 'ไม่มีเพลงที่กำลังเล่น';
-    updatePlayerCover(null);
-    updateHeroSection(null);
+    stopAndClearNowPlaying();
   }
 
   closeDeleteTrackModal();
@@ -1490,6 +1606,10 @@ async function playThisTrack(el) {
   updatePlayerCover(getCoverSrc(sn, an));
   updatePlayerHeartIcon();
   document.getElementById('miniPlayer').classList.add('active');
+
+  // มีเพลงกำลังเล่นแล้ว — แสดงปุ่มกากบาดที่แถบเพลย์เยอร์
+  const playerBarEl = document.getElementById('playerBar');
+  if (playerBarEl) playerBarEl.classList.remove('no-track');
 
   const songMeta = currentSongList[currentPlayIndex] || { name: sn, artist: an };
   updateHeroSection(songMeta);
@@ -1552,6 +1672,128 @@ async function playThisTrack(el) {
 }
 
 /* ══════════════════════════════════════════════════════════
+   ⭐ NEW: โหลดเพลงปัจจุบันแบบ "ไม่เล่น" (สำหรับเตรียม resume)
+   ────────────────────────────────────────────────────────
+   ใช้ตรรกะเดียวกับ playThisTrack() ในการหาไฟล์เสียง (localStorage
+   data URL หรือ IndexedDB blob) แต่ "ไม่เรียก startPlayback()" — แค่
+   ตั้ง src ไว้เฉย ๆ แล้วรอ caller เป็นคนสั่งเล่นเอง (กรณีต้อง seek
+   ไปตำแหน่งเดิมก่อน) เพื่อรองรับ auto-resume ตอนโหลดหน้าใหม่ โดยไม่
+   ต้องอิงกับแถวใน DOM ของ tracklist (ตอนเริ่มโหลดหน้า DOM แถวเพลง
+   ยังไม่ถูก render เสร็จ จึงเรียก playThisTrack(el) ตรง ๆ ไม่ได้)
+══════════════════════════════════════════════════════════ */
+async function loadTrackSourceOnly(song) {
+  const sn = song.name;
+  const an = song.artist || '';
+
+  const uploaded = JSON.parse(localStorage.getItem('uploadedSongs')) || [];
+  const ls = uploaded.find(s => s.name === sn && s.artist === an);
+  if (ls && ls.audioFile && ls.audioFile.startsWith('data:')) {
+    if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
+    audioElement.src = ls.audioFile;
+    audioElement.load();
+    return true;
+  }
+
+  if (db) {
+    try {
+      const s = await getSongFullByKeyFromDB(sn, an);
+      if (s && s.audioFile) {
+        const mime = getSafeMimeType(s.audioType, s.audioFileName);
+        const blob = new Blob([s.audioFile], { type: mime });
+        const blobUrl = URL.createObjectURL(blob);
+        if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+        currentBlobUrl = blobUrl;
+        audioElement.src = blobUrl;
+        audioElement.load();
+        return true;
+      }
+    } catch (e) { console.error(e); }
+  }
+  return false;
+}
+
+/* ══════════════════════════════════════════════════════════
+   ⭐ NEW: Auto-resume การเล่นเพลงตอนโหลดหน้า (กลับมาจากหน้าอื่น)
+   ────────────────────────────────────────────────────────
+   เดิม index.html ตอนโหลดหน้าใหม่จะอ่านแค่ 'currentSongName' /
+   'currentArtistName' มาแสดงผล UI (เช่น ชื่อเพลงในแถบ player-bar)
+   แต่ "ไม่เคยตั้ง .src ของ <audio> หรือเริ่มเล่นเสียงจริง" เพราะ
+   audio element ใหม่ถูกสร้างขึ้นมาใหม่ทุกครั้งที่โหลดหน้า (ไม่มี
+   เพลงเล่นอยู่เลยตั้งแต่ต้น) ผู้ใช้จึงต้องกดเล่นเองใหม่ทุกครั้งที่
+   เปลี่ยนหน้า ทำให้รู้สึกว่า "เพลงหยุด" ทั้งที่จริง ๆ คือไม่เคยเริ่ม
+   เล่นเองเลยตั้งแต่หน้านี้โหลดเสร็จ
+
+   ฟังก์ชันนี้แก้โดย:
+   1. เช็คว่ามีเพลงที่ "กำลังเล่นอยู่ก่อนเปลี่ยนหน้า" หรือไม่ จาก
+      flag 'sf_was_playing' (เซ็ตไว้ทุกครั้งที่ play/pause เปลี่ยนสถานะ)
+   2. ถ้ามี ให้โหลดไฟล์เสียงของเพลงนั้นแบบไม่เล่นก่อน (loadTrackSourceOnly)
+   3. seekไปยังตำแหน่งที่บันทึกไว้ล่าสุด ('currentPlayTime')
+   4. เริ่มเล่นต่อทันที (startPlayback) — ทำให้ความรู้สึกเหมือน "เพลง
+      เล่นต่อเนื่องไม่หยุด" แม้ตัวไฟล์เสียงจะมีช่วงสะดุดสั้น ๆ ตอนโหลด
+      หน้าใหม่จริงก็ตาม (เป็นข้อจำกัดของระบบ multi-page ที่ใช้
+      <a href> เปลี่ยนหน้าแบบเต็มรูปแบบ ไม่สามารถเล่นต่อแบบไร้รอยต่อ
+      100% ได้ ถ้าไม่เปลี่ยนเป็น SPA)
+   5. ถ้าผู้ใช้ pause ไว้ก่อนเปลี่ยนหน้า (sf_was_playing = '0') จะไม่
+      auto-play ให้ แต่ยัง seek ตำแหน่งเดิมไว้ให้พร้อม กดเล่นต่อได้ทันที
+
+   ⭐ FIX (รอบนี้): เดิมฟังก์ชันนี้ "ลืม" อัปเดต UI ของ miniPlayer /
+   player-bar ตอน auto-resume — element #miniPlayer ได้ class 'active'
+   ก็ต่อเมื่อมีคนเรียก playThisTrack() เท่านั้น (ปกติคือกดเพลงในลิสต์)
+   แต่เส้นทาง auto-resume ไม่เคยผ่าน playThisTrack() เลย ทำให้ทุกครั้ง
+   ที่กลับมาหน้า index.html เพลงเล่นต่อจริงในพื้นหลัง แต่แถบ mini
+   player (มือถือ) และชื่อเพลงในแถบ player-bar (เดสก์ท็อป) ไม่โผล่ขึ้น
+   มาให้เห็นเลย ดูเหมือนไม่มีเพลงเล่นอยู่ทั้งที่จริงมีเสียงออกอยู่
+
+   จึงเพิ่มขั้นอัปเดต UI (ชื่อเพลง/ศิลปิน/ปก/ไอคอนหัวใจ + เปิด
+   .active ให้ miniPlayer) ทันทีหลังยืนยันว่าโหลดไฟล์เสียงสำเร็จแล้ว
+   ก่อนจะค่อยตัดสินใจว่าจะ auto-play ต่อหรือแค่เตรียมตำแหน่งไว้
+══════════════════════════════════════════════════════════ */
+let autoResumeAttempted = false;
+async function tryAutoResumePlayback() {
+  if (autoResumeAttempted) return; // ป้องกันการเรียกซ้ำซ้อนจากหลาย event
+  const sn = localStorage.getItem('currentSongName');
+  const an = localStorage.getItem('currentArtistName') || '';
+  if (!sn) return; // ไม่มีเพลงที่เคยเล่นไว้เลย ไม่ต้องทำอะไร
+
+  autoResumeAttempted = true;
+
+  const savedTime  = parseFloat(localStorage.getItem('currentPlayTime') || '0') || 0;
+  const wasPlaying  = localStorage.getItem('sf_was_playing') === '1';
+
+  const loaded = await loadTrackSourceOnly({ name: sn, artist: an });
+  if (!loaded) { autoResumeAttempted = false; return; } // หาไฟล์เสียงไม่เจอ (อาจถูกลบไปแล้ว) ปล่อยให้ UI โชว์ idle ตามปกติ
+
+  // ── ⭐ FIX: อัปเดต UI miniPlayer / player-bar ให้แสดงทันทีที่รู้ว่ามีเพลงค้างอยู่ ──
+  // (เดิมจุดนี้หายไป ทำให้ miniPlayer ไม่ขึ้นแม้เพลงเล่นอยู่จริง)
+  const mpNameEl    = document.getElementById('mpName');
+  const mpArtistEl  = document.getElementById('mpArtist');
+  const pbNameEl    = document.querySelector('.player-bar .now-play-meta .name');
+  const pbArtistEl  = document.querySelector('.player-bar .now-play-meta .artist');
+  const miniPlayerEl = document.getElementById('miniPlayer');
+
+  if (mpNameEl)   mpNameEl.innerText   = sn;
+  if (mpArtistEl) mpArtistEl.innerText = an;
+  if (pbNameEl)   pbNameEl.innerText   = sn;
+  if (pbArtistEl) pbArtistEl.innerText = an;
+  updatePlayerCover(getCoverSrc(sn, an));
+  updatePlayerHeartIcon();
+  if (miniPlayerEl) miniPlayerEl.classList.add('active'); // ← จุดแก้หลัก
+
+  // มีเพลงค้างอยู่ — แสดงปุ่มกากบาดที่แถบเพลย์เยอร์ด้วย
+  const playerBarEl = document.getElementById('playerBar');
+  if (playerBarEl) playerBarEl.classList.remove('no-track');
+
+  if (wasPlaying) {
+    startPlayback(savedTime);
+  } else if (savedTime > 0) {
+    // ผู้ใช้ pause ไว้ก่อนเปลี่ยนหน้า — เตรียมตำแหน่งให้พร้อมแต่ไม่เล่นเอง
+    const setPos = () => { try { audioElement.currentTime = savedTime; } catch (e) {} };
+    if (audioElement.readyState >= 1) setPos();
+    else audioElement.addEventListener('loadedmetadata', setPos, { once: true });
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
    Highlight
 ══════════════════════════════════════════════════════════ */
 function updateTrackHighlight(el, name) {
@@ -1591,9 +1833,16 @@ audioElement.addEventListener('timeupdate', () => {
   const ts = document.querySelectorAll('.progress-row .prog-time');
   if (ts[0]) ts[0].textContent = fmtTime(audioElement.currentTime);
   if (ts[1]) ts[1].textContent = fmtTime(audioElement.duration || 0);
+  // ⭐ NEW: บันทึกตำแหน่งเวลาเล่นต่อเนื่อง (หน่วงความถี่ในตัวฟังก์ชันแล้ว)
+  // เพื่อให้ resume แม่นยำแม้ผู้ใช้ปิดแท็บ/รีเฟรชกะทันหันโดยไม่ได้กดลิงก์
+  persistPlaybackPosition(false);
 });
 
-audioElement.addEventListener('ended', () => { setPlayState(false); playByOffset(+1); });
+audioElement.addEventListener('ended', () => {
+  setPlayState(false);
+  localStorage.removeItem('currentPlayTime');
+  playByOffset(+1);
+});
 
 function seekAt(e) {
   const r = pbWrap.getBoundingClientRect();
@@ -1602,6 +1851,7 @@ function seekAt(e) {
     audioElement.currentTime = p * audioElement.duration;
     if (pbFill) pbFill.style.width = (p * 100) + '%';
     if (mpFill) mpFill.style.width = (p * 100) + '%';
+    persistPlaybackPosition(true);
   }
 }
 if (pbWrap) {
@@ -1613,8 +1863,16 @@ if (pbWrap) {
   document.addEventListener('touchend', ()  => { seekDrag = false; });
 }
 document.getElementById('openFullPlayer').addEventListener('click', () => {
-  if (audioElement.currentTime > 0) localStorage.setItem('currentPlayTime', audioElement.currentTime);
+  // ⭐ NEW: ใช้ force=true เพื่อบันทึกตำแหน่งล่าสุดทันทีก่อนเปลี่ยนหน้า
+  // (ไม่ต้องรอ throttle 1 วินาทีของ persistPlaybackPosition ตามปกติ)
+  persistPlaybackPosition(true);
 });
+
+/* ⭐ NEW: บันทึกตำแหน่งเล่นทันทีก่อนหน้าจะถูกปิด/เปลี่ยนหน้าไปทุกกรณี
+   ไม่ใช่แค่ตอนกดปุ่ม openFullPlayer เท่านั้น — ครอบคลุมการกดเมนู sidebar,
+   แถบเมนูล่างมือถือ, ปิดแท็บ, รีเฟรช ฯลฯ ด้วย เพื่อให้ resume แม่นยำเสมอ */
+window.addEventListener('pagehide', () => persistPlaybackPosition(true));
+window.addEventListener('beforeunload', () => persistPlaybackPosition(true));
 
 /* ══════════════════════════════════════════════════════════
    Render Track List
@@ -1840,6 +2098,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await new Promise(r => setTimeout(r, 100));
   await renderTrackList();
+
+  // ⭐ NEW: พยายาม auto-resume เพลงที่เล่นค้างไว้จากหน้าก่อนหน้า
+  // (ถ้า IndexedDB ยังไม่พร้อม ฟังก์ชันนี้จะถูกเรียกอีกครั้งจาก
+  // dbReq.onsuccess ด้านบนเมื่อ DB เปิดเสร็จ — มี flag autoResumeAttempted
+  // ป้องกันการรันซ้ำซ้อน)
+  tryAutoResumePlayback();
 });
 
 // รีเฟรชเพลย์ลิสต์เมื่อกลับมาหน้านี้หรือมีการเปลี่ยนแปลง

@@ -456,6 +456,7 @@
     console.error('Audio playback error:', audioElement.error);
     isPlaying = false;
     setPlayIcon(false);
+    persistWasPlaying(false);
     showSongToast('เล่นเพลงนี้ไม่ได้ ไฟล์อาจเสียหายหรือไม่รองรับ');
   });
 
@@ -479,6 +480,38 @@
       if (mimeMap[ext]) return mimeMap[ext];
     }
     return 'audio/mpeg';
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     ⭐ NEW: บันทึกตำแหน่งเวลาเล่น + flag กำลังเล่นอยู่หรือไม่
+     ────────────────────────────────────────────────────────
+     เพื่อให้ "สถานะการเล่น" sync กันได้ระหว่างหน้า index.html และ
+     song.html แบบสองทาง (ไม่ใช่แค่ song.html อ่านค่าจาก index.html
+     ตอนเปิดเข้ามาเฉย ๆ แบบเดิม) — ใช้ localStorage key เดียวกันกับ
+     index.html ทุกตัว ('currentPlayTime', 'sf_was_playing') เพื่อให้
+     ไม่ว่าจะเปลี่ยนหน้าไปทางไหน (index → song หรือ song → index)
+     ตำแหน่งเพลง/สถานะเล่น-หยุด จะต่อเนื่องกันเสมอ ไม่มีหน้าใดหน้าหนึ่ง
+     "ลืม" สถานะของอีกหน้า
+
+     เดิม song.html จะอ่าน 'currentPlayTime' ครั้งเดียวตอนโหลดหน้าแล้ว
+     ลบทิ้งทันที (ใช้แล้วลบ) แต่ไม่เคยเขียนกลับระหว่างที่เล่นอยู่ในหน้า
+     นี้เลย ถ้าผู้ใช้กดย้อนกลับไป index.html เพลงจะรีเซ็ตไปเริ่มจาก 0:00
+     ใหม่ทุกครั้ง (เพราะ index.html ไปอ่าน currentPlayTime ที่เป็นค่าเก่า
+     หรือไม่มีค่าเลย) ทั้งที่จริงเล่นมาหลายสิบวินาทีแล้วในหน้า song.html
+  ══════════════════════════════════════════════════════════ */
+  let lastTimeSaveAt = 0;
+  function persistPlaybackPosition(force) {
+    const now = Date.now();
+    if (!force && now - lastTimeSaveAt < 1000) return; // หน่วงไว้ ~1 วินาที ไม่เขียนถี่เกินไป
+    lastTimeSaveAt = now;
+    try {
+      if (audioElement.currentTime > 0) {
+        localStorage.setItem('currentPlayTime', String(audioElement.currentTime));
+      }
+    } catch (e) {}
+  }
+  function persistWasPlaying(state) {
+    try { localStorage.setItem('sf_was_playing', state ? '1' : '0'); } catch (e) {}
   }
 
   /* ══════════════════════════════════════════════════════════
@@ -738,6 +771,9 @@
     document.getElementById('mainBarThumb').style.left = `calc(${pct}% - 7px)`;
     document.getElementById('timeCurrentEl').textContent = fmtTime(audioElement.currentTime);
     document.getElementById('timeTotalEl').textContent   = fmtTime(audioElement.duration);
+    // ⭐ NEW: บันทึกตำแหน่งเวลาเล่นต่อเนื่อง (หน่วงความถี่ในตัวฟังก์ชันแล้ว)
+    // เพื่อให้กลับไป index.html (หรือหน้าอื่น) แล้ว resume ได้ตรงตำแหน่ง
+    persistPlaybackPosition(false);
   });
 
   audioElement.addEventListener('loadedmetadata', () => {
@@ -750,6 +786,7 @@
       audioElement.currentTime = 0;
       audioElement.play().catch(() => {});
     } else {
+      localStorage.removeItem('currentPlayTime');
       currentIndex = isShuffle
         ? Math.floor(Math.random() * playlist.length)
         : (currentIndex + 1) % playlist.length;
@@ -765,6 +802,7 @@
       mainBarFill.style.width  = (pct * 100) + '%';
       document.getElementById('mainBarThumb').style.left = `calc(${pct * 100}% - 7px)`;
       document.getElementById('timeCurrentEl').textContent = fmtTime(audioElement.currentTime);
+      persistPlaybackPosition(true);
     }
   }
 
@@ -784,13 +822,21 @@
     isPlaying = !isPlaying;
     setPlayIcon(isPlaying);
     if (isPlaying) {
-      audioElement.play().catch(() => {
+      audioElement.play().then(() => {
+        persistWasPlaying(true);
+      }).catch(() => {
         isPlaying = false;
         setPlayIcon(false);
+        persistWasPlaying(false);
         showSongToast('กดเล่นอีกครั้งเพื่อเริ่มเพลง');
       });
     } else {
       audioElement.pause();
+      // ⭐ NEW: บันทึกสถานะ "หยุดเล่น" ทันที ไม่งั้นถ้ากลับไป index.html
+      // ตอนนี้ทันทีหลังกด pause ระบบจะยังคิดว่ากำลังเล่นอยู่ (ค่าเก่าค้าง)
+      // แล้ว auto-resume เล่นเองทั้งที่ผู้ใช้ตั้งใจ pause ไว้
+      persistWasPlaying(false);
+      persistPlaybackPosition(true);
     }
   }
 
@@ -835,6 +881,7 @@
 
   function nextSong() {
     if (!playlist.length) return;
+    localStorage.removeItem('currentPlayTime');
     currentIndex = isShuffle
       ? Math.floor(Math.random() * playlist.length)
       : (currentIndex + 1) % playlist.length;
@@ -846,8 +893,10 @@
     // ถ้าเล่นมาแล้วเกิน 3 วิ → เริ่มเพลงปัจจุบันใหม่
     if (audioElement.currentTime > 3) {
       audioElement.currentTime = 0;
+      persistPlaybackPosition(true);
       return;
     }
+    localStorage.removeItem('currentPlayTime');
     currentIndex = isShuffle
       ? Math.floor(Math.random() * playlist.length)
       : (currentIndex - 1 + playlist.length) % playlist.length;
@@ -912,6 +961,7 @@
         `;
         item.style.cursor = 'pointer';
         item.addEventListener('click', () => {
+          localStorage.removeItem('currentPlayTime');
           currentIndex = (currentIndex + i) % playlist.length;
           loadAndPlayIndex(currentIndex);
         });
@@ -1040,8 +1090,14 @@
 
   /* ══════════════════════════════════════════════════════════
      Load & Play by Index
+     ⭐ NEW: เพิ่มพารามิเตอร์ autoplay (default true) — ใช้ false เฉพาะ
+     ตอนโหลดหน้าครั้งแรกกรณีที่เพลงถูก pause ไว้ก่อนเข้ามาหน้านี้
+     (sf_was_playing === '0') เพื่อไม่ให้เล่นเองโดยที่ผู้ใช้ไม่ได้ขอ
+     ส่วนกรณีอื่นทั้งหมด (next/prev/คลิกคิว/เพลงจบ) ยังคงเล่นต่อทันที
+     เหมือนเดิมเพราะเป็นการกระทำที่ผู้ใช้สั่งเอง หรือเป็นการเล่นต่อเนื่อง
+     ตามธรรมชาติของเพลย์ลิสต์
   ══════════════════════════════════════════════════════════ */
-  async function loadAndPlayIndex(index) {
+  async function loadAndPlayIndex(index, autoplay = true, resumeAt = 0) {
     if (index < 0 || index >= playlist.length) return;
     const song   = playlist[index];
     currentIndex = index;
@@ -1084,23 +1140,42 @@
     if (audioSrc) {
       audioElement.src = audioSrc;
       audioElement.load();
-      audioElement.currentTime = 0;
+      if (!resumeAt) audioElement.currentTime = 0;
+
+      if (!autoplay) {
+        // เตรียมไฟล์ไว้ให้พร้อมแต่ไม่เล่นเอง — แค่ seek ไปตำแหน่งที่ขอ (ถ้ามี)
+        isPlaying = false;
+        setPlayIcon(false);
+        persistWasPlaying(false);
+        if (resumeAt > 0) {
+          const setPos = () => { try { audioElement.currentTime = resumeAt; } catch (e) {} };
+          if (audioElement.readyState >= 1) setPos();
+          else audioElement.addEventListener('loadedmetadata', setPos, { once: true });
+        }
+        return;
+      }
 
       // ⚠️ FIX (เครื่องเก่า: ปุ่มขึ้น pause แต่ไม่มีเสียง):
       // รอ canplay ก่อนเล่นจริง เหมือนที่แก้ในหน้า index.html แทนที่จะ
       // เรียก play() ทันทีโดยไม่รอให้เครื่องช้า ๆ decode ไฟล์เสร็จก่อน
       isPlaying = true;
       setPlayIcon(true);
+      persistWasPlaying(true);
       let started = false;
       const tryPlay = () => {
         if (started) return;
         started = true;
+        if (resumeAt > 0) {
+          try { audioElement.currentTime = resumeAt; } catch (e) {}
+        }
         audioElement.play().then(() => {
           isPlaying = true;
           setPlayIcon(true);
+          persistWasPlaying(true);
         }).catch(() => {
           isPlaying = false;
           setPlayIcon(false);
+          persistWasPlaying(false);
           showSongToast('กดเล่นอีกครั้งเพื่อเริ่มเพลง');
         });
       };
@@ -1115,6 +1190,7 @@
             isPlaying = false;
             started = true;
             setPlayIcon(false);
+            persistWasPlaying(false);
             showSongToast('โหลดเพลงช้ากว่าปกติ ลองกดเล่นอีกครั้ง');
           }
         }, 8000);
@@ -1122,6 +1198,7 @@
     } else {
       isPlaying = false;
       setPlayIcon(false);
+      persistWasPlaying(false);
     }
   }
 
@@ -1199,15 +1276,26 @@
 
     playlist.splice(currentIndex, 1);
     closeDeleteModal();
+    localStorage.removeItem('currentPlayTime');
 
     if (playlist.length > 0) {
       currentIndex = Math.min(currentIndex, playlist.length - 1);
       loadAndPlayIndex(currentIndex);
     } else {
       audioElement.pause();
+      persistWasPlaying(false);
+      localStorage.removeItem('currentSongName');
+      localStorage.removeItem('currentArtistName');
       history.back();
     }
   }
+
+  /* ⭐ NEW: บันทึกตำแหน่งเล่นทันทีก่อนหน้าจะถูกปิด/เปลี่ยนหน้าไปทุกกรณี
+     ไม่ใช่แค่ตอนกดปุ่มย้อนกลับเท่านั้น — ครอบคลุมการกดเมนู sidebar,
+     แถบเมนูล่างมือถือ, ปิดแท็บ, รีเฟรช ฯลฯ ด้วย เพื่อให้ resume แม่นยำเสมอ
+     ไม่ว่าผู้ใช้จะออกจากหน้านี้ด้วยวิธีไหนก็ตาม */
+  window.addEventListener('pagehide', () => persistPlaybackPosition(true));
+  window.addEventListener('beforeunload', () => persistPlaybackPosition(true));
 
   /* ══════════════════════════════════════════════════════════
      Init — สร้าง playlist ตาม order ของหน้าสวยดี
@@ -1224,7 +1312,13 @@
 
     const songName      = localStorage.getItem('currentSongName');
     const artistName    = localStorage.getItem('currentArtistName');
-    const savedPlayTime = parseFloat(localStorage.getItem('currentPlayTime') || '0');
+    const savedPlayTime = parseFloat(localStorage.getItem('currentPlayTime') || '0') || 0;
+    // ⭐ NEW: เช็คว่าเพลงกำลังเล่นอยู่ก่อนเข้ามาหน้านี้หรือไม่ (ตั้งโดย
+    // index.html หรือ song.html เองตอนกด play/pause) — ใช้ตัดสินว่าควร
+    // auto-play ทันทีตอนโหลดหน้านี้ไหม ถ้าผู้ใช้ pause ไว้ก่อนหน้านี้
+    // ก็ไม่ควรเล่นเองโดยที่ผู้ใช้ไม่ได้ขอ แค่เตรียมตำแหน่งให้พร้อม
+    const wasPlayingFlag = localStorage.getItem('sf_was_playing');
+    const shouldAutoplay = wasPlayingFlag !== '0'; // ค่า default (ไม่มี flag เลย) ถือว่าเล่นได้ตามพฤติกรรมเดิม
 
     /* ── รวมเพลงจากทุกแหล่ง (ป้องกัน duplicates) ── */
     const addedKeys = new Set();
@@ -1316,42 +1410,66 @@
       audioElement.preload = 'auto';
       audioElement.load();
 
+      /* ⭐ NEW: ตัดสินใจว่าควร auto-play ทันทีไหมตาม shouldAutoplay (มาจาก
+         flag sf_was_playing) — ถ้าผู้ใช้ pause ไว้ก่อนเข้ามาหน้านี้
+         (เช่น pause ที่หน้า index.html แล้วกดเปิดเพลงเต็มจอ) จะแค่ seek
+         ไปตำแหน่งเดิมให้พร้อม ไม่เล่นเอง ส่วนกรณีปกติ (เพลงกำลังเล่นอยู่
+         ก่อนเข้ามา หรือไม่มี flag เลยซึ่งคือพฤติกรรมเดิม) จะเล่นต่อทันที
+         จากตำแหน่งที่บันทึกไว้ ทำให้ "เล่นต่อเนื่องไม่สะดุด" เวลาสลับมา
+         จากหน้า index.html ระหว่างเพลงกำลังเล่นอยู่ */
       let playStarted = false;
-      const tryPlay = () => {
-        if (playStarted) return;
-        playStarted = true;
+
+      const applyResumePosition = () => {
         if (savedPlayTime > 0) {
           try { audioElement.currentTime = savedPlayTime; } catch {}
-          localStorage.removeItem('currentPlayTime');
         }
-        audioElement.play().then(() => {
-          isPlaying = true;
-          setPlayIcon(true);
-        }).catch(() => {
-          isPlaying = false;
-          setPlayIcon(false);
-          showSongToast('กดเล่นอีกครั้งเพื่อเริ่มเพลง');
-        });
       };
 
-      // ⚠️ FIX (เครื่องเก่า): เดิมถ้า canplay ไม่ทันใน 3 วิ จะบังคับเรียก
-      // tryPlay() ต่อแบบไม่มีเงื่อนไข ซึ่งอาจเล่นไม่ออกเสียงเงียบ ๆ บนเครื่อง
-      // ที่ยังโหลดไม่เสร็จจริง ตอนนี้ขยายเวลารอเป็น 8 วิ (ให้เวลาเครื่องช้า
-      // มากพอ) และถ้ายังไม่พร้อมจริง ๆ จะแจ้งเตือนผู้ใช้แทนที่จะฝืนเล่น
-      if (audioElement.readyState >= 3) {
-        tryPlay();
+      if (!shouldAutoplay) {
+        // ผู้ใช้ pause ไว้ก่อนเข้ามาหน้านี้ — แค่เตรียมตำแหน่งให้พร้อม ไม่เล่นเอง
+        isPlaying = false;
+        setPlayIcon(false);
+        if (audioElement.readyState >= 1) applyResumePosition();
+        else audioElement.addEventListener('loadedmetadata', applyResumePosition, { once: true });
+        localStorage.removeItem('currentPlayTime');
       } else {
-        audioElement.addEventListener('canplay', tryPlay, { once: true });
-        setTimeout(() => {
-          if (!playStarted) {
-            audioElement.removeEventListener('canplay', tryPlay);
-            console.warn('โหลดไฟล์เสียงนานเกินไป — เครื่องอาจช้าหรือไฟล์มีปัญหา');
-            playStarted = true;
+        const tryPlay = () => {
+          if (playStarted) return;
+          playStarted = true;
+          applyResumePosition();
+          localStorage.removeItem('currentPlayTime');
+          audioElement.play().then(() => {
+            isPlaying = true;
+            setPlayIcon(true);
+            persistWasPlaying(true);
+          }).catch(() => {
             isPlaying = false;
             setPlayIcon(false);
-            showSongToast('โหลดเพลงช้ากว่าปกติ ลองกดเล่นอีกครั้ง');
-          }
-        }, 8000);
+            persistWasPlaying(false);
+            showSongToast('กดเล่นอีกครั้งเพื่อเริ่มเพลง');
+          });
+        };
+
+        // ⚠️ FIX (เครื่องเก่า): เดิมถ้า canplay ไม่ทันใน 3 วิ จะบังคับเรียก
+        // tryPlay() ต่อแบบไม่มีเงื่อนไข ซึ่งอาจเล่นไม่ออกเสียงเงียบ ๆ บนเครื่อง
+        // ที่ยังโหลดไม่เสร็จจริง ตอนนี้ขยายเวลารอเป็น 8 วิ (ให้เวลาเครื่องช้า
+        // มากพอ) และถ้ายังไม่พร้อมจริง ๆ จะแจ้งเตือนผู้ใช้แทนที่จะฝืนเล่น
+        if (audioElement.readyState >= 3) {
+          tryPlay();
+        } else {
+          audioElement.addEventListener('canplay', tryPlay, { once: true });
+          setTimeout(() => {
+            if (!playStarted) {
+              audioElement.removeEventListener('canplay', tryPlay);
+              console.warn('โหลดไฟล์เสียงนานเกินไป — เครื่องอาจช้าหรือไฟล์มีปัญหา');
+              playStarted = true;
+              isPlaying = false;
+              setPlayIcon(false);
+              persistWasPlaying(false);
+              showSongToast('โหลดเพลงช้ากว่าปกติ ลองกดเล่นอีกครั้ง');
+            }
+          }, 8000);
+        }
       }
     }
   });
